@@ -22,7 +22,7 @@ def test_parse_psid_metadata():
 
 
 def test_parse_prg_load_address():
-    song = parse(b"\x00\x10" + b"\xAB\xCD")
+    song = parse(b"\x00\x10" + b"\xab\xcd")
     assert song.load == 0x1000
     assert song.init == 0x1000  # init = load
     assert song.play == 0x1006  # play = load + 6
