@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -28,6 +30,10 @@ CACHE = Path(os.environ.get("FC_TUNECACHE", str(REPO / "tests" / ".tunecache")))
 MIRROR = os.environ.get("HVSC_MIRROR", "https://hvsc.brona.dk/HVSC/C64Music").rstrip(
     "/"
 )
+
+# Transient-failure retry policy for mirror fetches (attempts, fixed backoff).
+_FETCH_ATTEMPTS = 4
+_FETCH_BACKOFF = 2.0
 
 # id -> HVSC relative path.  We R Da Best (tune 2) is the decompile reference
 # (the tune the Future Composer player byte-exact validation was derived from).
@@ -50,8 +56,25 @@ def fetch(relpath: str, *, force: bool = False) -> Path:
     req = urllib.request.Request(
         url, headers={"User-Agent": "pyfuturecomposer/fetch_tunes"}
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 (https mirror)
-        data = resp.read()
+    data = None
+    last_exc = None
+    for attempt in range(_FETCH_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(  # nosec B310 (https mirror)
+                req, timeout=60
+            ) as resp:
+                data = resp.read()
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:  # genuinely absent -- do not retry
+                raise
+            last_exc = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_exc = exc
+        if attempt < _FETCH_ATTEMPTS - 1:
+            time.sleep(_FETCH_BACKOFF)
+    if data is None:
+        raise RuntimeError(f"{url}: fetch failed after retries: {last_exc}")
     if not _is_sid(data):
         raise RuntimeError(f"{url}: not a SID file (magic {data[:4]!r})")
     dest.parent.mkdir(parents=True, exist_ok=True)
