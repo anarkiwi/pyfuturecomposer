@@ -64,6 +64,26 @@ def fetch_id(tune_id: str, *, force: bool = False) -> Path:
     return fetch(TUNES[tune_id], force=force)
 
 
+def resolve(relpath: str) -> Path:
+    """Path to ``relpath`` from a local HVSC tree, the cache, or the mirror.
+
+    Prefers a local HVSC checkout (``$HVSC``, e.g. ``.../C64Music``) so the
+    corpus test runs for real against a present tree; otherwise falls back to
+    the gitignored cache / the public mirror (``fetch``).  Raises if the tune
+    cannot be obtained anywhere.
+    """
+    relpath = relpath.lstrip("/")
+    hvsc = os.environ.get("HVSC")
+    if hvsc:
+        local = Path(hvsc) / relpath
+        if local.exists():
+            return local
+    cached = CACHE / relpath
+    if cached.exists():
+        return cached
+    return fetch(relpath)
+
+
 def main(argv=None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)

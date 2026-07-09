@@ -4,7 +4,7 @@ from pyfuturecomposer.audio import render_samples, render_wav, write_wav
 from pyfuturecomposer.errors import FutureComposerError, SidParseError
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import Player, iter_frames, render_grid
-from pyfuturecomposer.reader import parse, read
+from pyfuturecomposer.reader import FutureComposerSidParser, parse, read
 from pyfuturecomposer.reglog import (
     RegWrite,
     iter_register_writes,
@@ -16,6 +16,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "FutureComposerError",
+    "FutureComposerSidParser",
     "Player",
     "RegWrite",
     "SidParseError",
