@@ -1,7 +1,9 @@
 """Exceptions raised by pyfuturecomposer."""
 
+from pysidtracker import SidError
 
-class FutureComposerError(Exception):
+
+class FutureComposerError(SidError):
     """Base class for all pyfuturecomposer errors."""
 
 

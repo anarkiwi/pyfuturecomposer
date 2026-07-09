@@ -5,52 +5,52 @@ with a header giving the load/init/play addresses.  Future Composer is
 relocatable (init = load, play = load + 6) and carries its data tables inline at
 fixed offsets-from-load, so the reader only needs to unwrap the container; the
 player walks the inline tables from the image directly.
+
+Container/header decoding is delegated to :mod:`pysidtracker` (the shared
+``parse_sid_header``/``SidImage``); the Future Composer init/play fallbacks and
+the bare ``.prg`` path are applied on top.
 """
 
-import struct
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Tuple
+
+from pysidtracker import (
+    BaseSidParser,
+    SidError,
+    SidImage,
+)
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import SidParseError
 from pyfuturecomposer.model import Song
 
-_PSID_HEADER = struct.Struct(">4sHHHHHHHI")  # magic..speed
-
-
-def _read_cstr(raw: bytes) -> str:
-    return raw.split(b"\0", 1)[0].decode("latin-1")
-
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     """Return (load, init, play, name, author, released, image)."""
-    magic = data[:4]
-    if magic in (b"PSID", b"RSID"):
-        if len(data) < _PSID_HEADER.size:
-            raise SidParseError("truncated PSID/RSID header")
-        _m, _ver, data_off, load, init, play, _songs, _start, _speed = (
-            _PSID_HEADER.unpack_from(data, 0)
+    if data[:4] in (b"PSID", b"RSID"):
+        try:
+            image = SidImage.from_sid(data)
+        except SidError as exc:
+            raise SidParseError(str(exc)) from exc
+        header = image.header
+        load = image.load
+        init = header.init_address or load + constants.DEFAULT_INIT_OFFSET
+        play = header.play_address or load + constants.DEFAULT_PLAY_OFFSET
+        return (
+            load,
+            init,
+            play,
+            header.name,
+            header.author,
+            header.released,
+            image.image,
         )
-        name = _read_cstr(data[22:54])
-        author = _read_cstr(data[54:86])
-        released = _read_cstr(data[86:118])
-        body = data[data_off:]
-        if load == 0:  # load address is the first 2 bytes of the body
-            if len(body) < 2:
-                raise SidParseError("truncated PSID body")
-            load = body[0] | (body[1] << 8)
-            image = body[2:]
-        else:
-            image = body
-        if init == 0:
-            init = load + constants.DEFAULT_INIT_OFFSET
-        if play == 0:
-            play = load + constants.DEFAULT_PLAY_OFFSET
-        return load, init, play, name, author, released, image
     # Bare .prg: 2-byte little-endian load address + image.
-    if len(data) < 2:
-        raise SidParseError("truncated .prg image")
-    load = data[0] | (data[1] << 8)
+    try:
+        image = SidImage.from_prg(data)
+    except SidError as exc:
+        raise SidParseError(str(exc)) from exc
+    load = image.load
     return (
         load,
         load + constants.DEFAULT_INIT_OFFSET,
@@ -58,7 +58,7 @@ def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
         "",
         "",
         "",
-        data[2:],
+        image.image,
     )
 
 
@@ -79,3 +79,22 @@ def parse(data: bytes) -> Song:
 def read(path) -> Song:
     """Read a Future Composer tune from a path into a :class:`Song`."""
     return parse(Path(path).read_bytes())
+
+
+class FutureComposerSidParser(BaseSidParser):
+    """:class:`~pysidtracker.BaseSidParser` binding for Future Composer.
+
+    Provides the shared ``read``/``parse``/``detect`` surface. Future Composer
+    has no reliable fixed magic/signature, so :meth:`recognize` returns ``None``
+    and :meth:`detect` reports via the emulated init (or ``UNKNOWN``).
+    """
+
+    error_class: type = SidParseError
+
+    def parse(self, data: bytes, **_kwargs: Any) -> Song:
+        """Decode raw ``.sid``/``.prg`` ``data`` into a :class:`Song`."""
+        return parse(data)
+
+    def recognize(self, image):  # pylint: disable=unused-argument
+        """No reliable Future Composer signature exists; always ``None``."""
+        return None
