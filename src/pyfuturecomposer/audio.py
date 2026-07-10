@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pysidtracker.audio import CHIP_MODELS, write_wav
 from pysidtracker.audio import render_samples as _render_samples
-from pysidtracker.audio import _default_device
+from pysidtracker.audio import default_device, device_sampling_frequency
 from pysidtracker.errors import AudioUnavailable
 
 from pyfuturecomposer import constants
@@ -41,7 +41,7 @@ def render_samples(
         raise FutureComposerError(f"chip model must be one of {CHIP_MODELS}")
     if device is None:
         try:
-            device = _default_device(model, sampling_frequency)
+            device = default_device(model, sampling_frequency)
         except AudioUnavailable as exc:
             raise FutureComposerError(
                 "pyresidfp is required to render audio; "
@@ -57,7 +57,7 @@ def render_samples(
         write_spacing=constants.DEFAULT_WRITE_SPACING,
         device=device,
     )
-    return samples, float(device.sampling_frequency)
+    return samples, device_sampling_frequency(device)
 
 
 def render_wav(song: Song, dst, seconds: float = 60.0, **options) -> Path:
