@@ -11,6 +11,13 @@ from pyfuturecomposer.reglog import (
     read_reglog,
     write_reglog,
 )
+from pyfuturecomposer.writer import (
+    is_editor_native,
+    to_prg,
+    to_sid,
+    write_prg,
+    write_sid,
+)
 
 __version__ = "0.1.0"
 
@@ -22,6 +29,7 @@ __all__ = [
     "SidParseError",
     "Song",
     "__version__",
+    "is_editor_native",
     "iter_frames",
     "iter_register_writes",
     "parse",
@@ -30,6 +38,10 @@ __all__ = [
     "render_grid",
     "render_samples",
     "render_wav",
+    "to_prg",
+    "to_sid",
+    "write_prg",
     "write_reglog",
+    "write_sid",
     "write_wav",
 ]

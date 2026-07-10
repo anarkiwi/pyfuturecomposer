@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from pyfuturecomposer import audio, reglog
+from pyfuturecomposer import audio, reglog, writer
 from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.reader import read
 
@@ -32,6 +32,22 @@ def _wav(args) -> None:
     print(f"wrote {args.output}")
 
 
+def _export(args) -> None:
+    song = read(args.song)
+    fmt = args.format or ("sid" if args.output.lower().endswith(".sid") else "prg")
+    if fmt == "sid":
+        writer.write_sid(song, args.output)
+    else:
+        writer.write_prg(song, args.output)
+    print(f"wrote {args.output} ({fmt})")
+    if fmt == "prg" and not writer.is_editor_native(song):
+        print(
+            f"note: load ${song.load:04X} play ${song.play:04X} is a relocated rip; "
+            "the FutureComposer editor loads the canonical $1800/$1806 build",
+            file=sys.stderr,
+        )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pyfuturecomposer", description="Future Composer song tools"
@@ -54,6 +70,19 @@ def _parser() -> argparse.ArgumentParser:
     wav.add_argument("--seconds", type=float, default=60.0)
     wav.add_argument("--model", choices=audio.CHIP_MODELS, default="8580")
     wav.set_defaults(func=_wav)
+
+    export = commands.add_parser(
+        "export", help="write a form the FutureComposer editor can load"
+    )
+    export.add_argument("song", help="Future Composer .sid/.prg file")
+    export.add_argument("output", help="output file (.prg editor module or .sid)")
+    export.add_argument(
+        "--format",
+        choices=("prg", "sid"),
+        default=None,
+        help="output format (default: inferred from the output extension)",
+    )
+    export.set_defaults(func=_export)
     return parser
 
 
