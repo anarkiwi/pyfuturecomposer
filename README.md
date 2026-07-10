@@ -28,6 +28,8 @@ song = fc.read("tune.sid")            # path, bytes, or binary file object; .sid
 # Per-frame SID register writes the playroutine emits each frame.
 for writes in fc.iter_frames(song, max_frames=50 * 60):
     ...                               # writes: list[(register, value)]
+
+fc.write_prg(song, "tune.prg")        # export a module the FC editor can load
 ```
 
 See [docs/usage.md](docs/usage.md) for the register grid, register logs, WAV

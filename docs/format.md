@@ -20,6 +20,18 @@ the tune's init in a 6502 emulator. Container headers are not trusted.
 sequence and pattern opcode streams, the instrument records, and the
 wave/arp/pulse-width/filter tables the playroutine walks per frame.
 
+## Writing back (editor-loadable export)
+
+The FutureComposer editor's native module is the driver code plus the inline
+song data saved as a plain C64 program (two-byte load address + image), so
+:func:`pyfuturecomposer.to_prg` re-emits exactly that and a canonical build
+(load `$1800`, play `$1806`) loads straight back into the editor. There is no
+separate data-only container (unlike Amiga Future Composer's `SMOD`).
+:func:`pyfuturecomposer.to_sid` re-wraps the same image in a PSID, preserving the
+entry points and metadata for a byte-exact model round-trip. Relocated rips are
+written verbatim at their own load address; the 6502 code carries absolute
+operands, so this exporter does not re-relocate them to `$1800`.
+
 ## Player and playback notes
 
 The player is a faithful integer transcription of Future Composer's `entry_1806`
