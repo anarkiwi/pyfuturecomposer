@@ -23,45 +23,13 @@ constant transcribed from the disassembly (:mod:`pyfuturecomposer.constants`).
 
 from typing import Iterator, List, Tuple
 
+from pysidtracker.mos6502 import SidWriteCapturingMemory, adc, s8, sbc
+
 from pyfuturecomposer import constants
 from pyfuturecomposer.model import Song
 
 SID_REG_BASE = constants.SID_BASE
 NREG = constants.SID_REG_COUNT
-
-
-def _s8(value: int) -> int:
-    """Interpret ``value`` (a byte) as a signed 8-bit int (the 6502 sign test)."""
-    value &= 0xFF
-    return value - 0x100 if value & 0x80 else value
-
-
-class _Mem:
-    """A flat 64 KiB 6502 memory model seeded with the tune image."""
-
-    def __init__(self, image: bytes, load: int):
-        self.mem = bytearray(0x10000)
-        self.mem[load : load + len(image)] = image
-        self._writes: List[Tuple[int, int]] = []
-
-    def r(self, addr: int) -> int:
-        """Read a byte at ``addr`` (16-bit wrap)."""
-        return self.mem[addr & 0xFFFF]
-
-    def w(self, addr: int, val: int) -> None:
-        """Write a byte; SID register writes are also captured for the reglog."""
-        addr &= 0xFFFF
-        val &= 0xFF
-        self.mem[addr] = val
-        reg = addr - SID_REG_BASE
-        if 0 <= reg < NREG:
-            self._writes.append((reg, val))
-
-    def take(self) -> List[Tuple[int, int]]:
-        """Return + clear this frame's captured SID ``(reg, val)`` writes."""
-        out = self._writes
-        self._writes = []
-        return out
 
 
 class Player:
@@ -92,22 +60,9 @@ class Player:
         self.a_filt_lo = load + c.OFF_FILT_LO
         self.a_filt_hi = load + c.OFF_FILT_HI
         self.a_wave_self = load + c.OFF_WAVE_PROG_SELF
-        self.mem = _Mem(song.image, load)
+        self.mem = SidWriteCapturingMemory(song.image, load)
         self.finished = False
         self._init_state()
-
-    # ---- 6502 arithmetic primitives -------------------------------------
-    @staticmethod
-    def _adc(a: int, m: int, carry_in: int) -> Tuple[int, int]:
-        """6502 ADC: ``A + M + C`` -> ``(result_byte, carry_out)`` (binary mode)."""
-        total = (a & 0xFF) + (m & 0xFF) + (carry_in & 1)
-        return total & 0xFF, 1 if total > 0xFF else 0
-
-    @staticmethod
-    def _sbc(a: int, m: int, carry_in: int) -> Tuple[int, int]:
-        """6502 SBC: ``A - M - (1-C)`` -> ``(result_byte, carry_out)``."""
-        total = (a & 0xFF) - (m & 0xFF) - (1 - (carry_in & 1))
-        return total & 0xFF, 1 if total >= 0 else 0
 
     def r(self, addr: int) -> int:
         """Memory read."""
@@ -158,7 +113,7 @@ class Player:
         self.w(0x029B, (self.r(0x029B) + 1) & 0xFF)
         self.w(SID_REG_BASE + 0x18, 0x1F)
         speed = self.r(self.speed_addr)
-        dec = _s8(self.r(0x02CA) - 1)
+        dec = s8(self.r(0x02CA) - 1)
         if dec < 0:
             dec = speed
         self.w(0x02CA, dec & 0xFF)
@@ -186,7 +141,7 @@ class Player:
         self.w(0x00FB, seq_lo)
         self.w(0x00FC, seq_hi)
         seq_ptr = seq_lo | (seq_hi << 8)
-        c = _s8(self.vget(0x027E, x) - 1)
+        c = s8(self.vget(0x027E, x) - 1)
         self.vset(0x027E, x, c)
         if c >= 0:
             self._lab_19dd(x)
@@ -288,7 +243,7 @@ class Player:
     def _lab_193a(self, x: int, pat_ptr: int, f8: int) -> None:
         ad = self.r(0x02AD)
         self.vset(0x027E, x, self.vget(0x0281, x))
-        noteidx = (f8 + _s8(self.vget(0x02A6, x))) & 0xFF
+        noteidx = (f8 + s8(self.vget(0x02A6, x))) & 0xFF
         self.vset(0x0287, x, noteidx)
         lo = self.r(self.freq_lo + noteidx)
         hi = self.r(self.freq_hi + noteidx)
@@ -329,7 +284,7 @@ class Player:
         rc = self.vget(0x02CD, x)
         advance = True
         if rc != 0:
-            nrc = _s8(rc - 1)
+            nrc = s8(rc - 1)
             self.vset(0x02CD, x, nrc & 0xFF)
             if nrc >= 0:
                 advance = False
@@ -370,10 +325,10 @@ class Player:
         if self.vget(0x02B2, x) == 0:
             do_step = True
         else:
-            nb5 = _s8(self.vget(0x02B5, x) - 1)
+            nb5 = s8(self.vget(0x02B5, x) - 1)
             self.vset(0x02B5, x, nb5 & 0xFF)
             if nb5 == 0:
-                nb2 = _s8(self.vget(0x02B2, x) + 1)
+                nb2 = s8(self.vget(0x02B2, x) + 1)
                 self.vset(0x02B2, x, nb2 & 0xFF)
                 if nb2 >= 0:
                     do_step = True
@@ -391,15 +346,15 @@ class Player:
         y = self.vget(0x0287, x)
         flo_y1 = self.r(self.freq_lo + ((y + 1) & 0xFF))
         flo_y = self.r(self.freq_lo + y)
-        d6, c = self._sbc(flo_y1, flo_y, 1)
+        d6, c = sbc(flo_y1, flo_y, 1)
         self.w(0x02D6, d6)
         fhi_y1 = self.r(self.freq_hi + ((y + 1) & 0xFF))
         fhi_y = self.r(self.freq_hi + y)
-        a, c2 = self._sbc(fhi_y1, fhi_y, c)
-        a, _ = self._adc(a, self.vget(0x0299, x), c2)
+        a, c2 = sbc(fhi_y1, fhi_y, c)
+        a, _ = adc(a, self.vget(0x0299, x), c2)
         a = (a & 0xFF) >> 1  # 1a62 LSR A once, then the 1a63 loop
         while True:
-            ae = _s8(self.r(0x02AE) - 1)
+            ae = s8(self.r(0x02AE) - 1)
             self.w(0x02AE, ae & 0xFF)
             if ae < 0:
                 break
@@ -413,22 +368,22 @@ class Player:
         cnt = self.vget(0x02AF, x) >> 1
         yy = cnt
         while True:
-            yy = _s8(yy - 1)
+            yy = s8(yy - 1)
             if yy < 0:
                 break
-            nd3, c = self._sbc(self.r(0x02D3), self.r(0x02D6), 1)
+            nd3, c = sbc(self.r(0x02D3), self.r(0x02D6), 1)
             self.w(0x02D3, nd3)
-            nd4, _ = self._sbc(self.r(0x02D4), self.r(0x02D5), c)
+            nd4, _ = sbc(self.r(0x02D4), self.r(0x02D5), c)
             self.w(0x02D4, nd4)
         if self.vget(0x0299, x) >= 4:
             yy = self.vget(0x02B5, x)
             while True:
-                yy = _s8(yy - 1)
+                yy = s8(yy - 1)
                 if yy < 0:
                     break
-                nd3, c = self._adc(self.r(0x02D3), self.r(0x02D6), 0)
+                nd3, c = adc(self.r(0x02D3), self.r(0x02D6), 0)
                 self.w(0x02D3, nd3)
-                nd4, _ = self._adc(self.r(0x02D4), self.r(0x02D5), c)
+                nd4, _ = adc(self.r(0x02D4), self.r(0x02D5), c)
                 self.w(0x02D4, nd4)
             ad = self.r(0x02AD)
             self.w(SID_REG_BASE + 0 + ad, self.r(0x02D3))
@@ -440,17 +395,17 @@ class Player:
         if diff > 2 and self.vget(0x0296, x) != 0:
             mode = self.vget(0x0296, x) & 3
             if mode == 1:  # 1b08 add
-                n293, c = self._adc(self.vget(0x0293, x), self.r(0x02BB), 0)
+                n293, c = adc(self.vget(0x0293, x), self.r(0x02BB), 0)
                 self.vset(0x0293, x, n293)
                 self.w(SID_REG_BASE + 0 + ad, n293)
-                n28d, _ = self._adc(self.vget(0x028D, x), self.r(0x02BC), c)
+                n28d, _ = adc(self.vget(0x028D, x), self.r(0x02BC), c)
                 self.vset(0x028D, x, n28d)
                 self.w(SID_REG_BASE + 1 + ad, n28d)
             else:  # 1ae9 subtract
-                n293, c = self._sbc(self.vget(0x0293, x), self.r(0x02BB), 1)
+                n293, c = sbc(self.vget(0x0293, x), self.r(0x02BB), 1)
                 self.vset(0x0293, x, n293)
                 self.w(SID_REG_BASE + 0 + ad, n293)
-                n28d, _ = self._sbc(self.vget(0x028D, x), self.r(0x02BC), c)
+                n28d, _ = sbc(self.vget(0x028D, x), self.r(0x02BC), c)
                 self.vset(0x028D, x, n28d)
                 self.w(SID_REG_BASE + 1 + ad, n28d)
         self._pw_sweep(x, ad)
@@ -473,16 +428,16 @@ class Player:
                 self.w(0x02A5, self.r(self.t_pwstep + ((yy + 1) & 0xFF)))
             a5 = self.r(0x02A5)
             if self.vget(0x02C6, x) == 0:  # 1b5d subtract
-                n29c, c = self._sbc(self.vget(0x029C, x), a5, 1)
+                n29c, c = sbc(self.vget(0x029C, x), a5, 1)
                 self.vset(0x029C, x, n29c)
-                n29f, _ = self._sbc(self.vget(0x029F, x), 0, c)
+                n29f, _ = sbc(self.vget(0x029F, x), 0, c)
                 self.vset(0x029F, x, n29f)
                 if n29f < 1:
                     self.vset(0x02C6, x, 1)
             else:  # 1b7a add
-                n29c, c = self._adc(self.vget(0x029C, x), a5, 0)
+                n29c, c = adc(self.vget(0x029C, x), a5, 0)
                 self.vset(0x029C, x, n29c)
-                n29f, _ = self._adc(self.vget(0x029F, x), 0, c)
+                n29f, _ = adc(self.vget(0x029F, x), 0, c)
                 self.vset(0x029F, x, n29f)
                 if n29f >= 0x0F:
                     self.vset(0x02C6, x, 0)
@@ -493,9 +448,9 @@ class Player:
         if (self.vget(0x02A2, x) & 0x80) and (self.vget(0x0299, x) & 1):
             self.w(self.a_pw_carry, 0xB0)
         carry_imm = self.r(self.a_pw_carry)
-        plo, c = self._adc(self.vget(0x029C, x), carry_imm, 0)
+        plo, c = adc(self.vget(0x029C, x), carry_imm, 0)
         self.w(SID_REG_BASE + 2 + ad, plo)
-        phi, _ = self._adc(self.vget(0x029F, x), 0, c)
+        phi, _ = adc(self.vget(0x029F, x), 0, c)
         self.w(SID_REG_BASE + 3 + ad, phi)
         ac = self.r(0x02AC)
         if (ac & 0x40) and self.vget(0x0299, x) >= 3:
@@ -581,13 +536,13 @@ class Player:
         self._wave_program(x, ad)
 
     def _arp_delay(self, x: int, ad: int) -> None:
-        nb8 = _s8(self.vget(0x02B8, x) - 1)
+        nb8 = s8(self.vget(0x02B8, x) - 1)
         self.vset(0x02B8, x, nb8 & 0xFF)
         if nb8 < 0:
             self.vset(0x02B8, x, 2)
         delay = self.r(self.t_arpdelay + self.vget(0x02B8, x))
         self.w(0x0041, delay)
-        noteidx = (self.vget(0x0287, x) + _s8(delay)) & 0xFF
+        noteidx = (self.vget(0x0287, x) + s8(delay)) & 0xFF
         self._lab_1d25(ad, noteidx)
 
     def _lab_1d25(self, ad: int, noteidx: int) -> None:
@@ -610,7 +565,7 @@ class Player:
         pitch = self.r(self.t_wavepitch + idx)
         self.w(0x02BF, pitch)
         if (d2aa & 0x10) != 0:
-            noteidx = (self.vget(0x0287, x) + _s8(pitch)) & 0xFF
+            noteidx = (self.vget(0x0287, x) + s8(pitch)) & 0xFF
             self._lab_1d25(ad, noteidx)
         else:
             self.w(SID_REG_BASE + 1 + ad, (pitch + 0x0D) & 0xFF)

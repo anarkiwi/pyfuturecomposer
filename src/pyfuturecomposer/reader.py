@@ -46,39 +46,26 @@ _FC_PATS: Tuple[CodePattern, ...] = tuple(
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     """Return (load, init, play, name, author, released, image)."""
-    if data[:4] in (b"PSID", b"RSID"):
-        try:
-            image = SidImage.from_sid(data)
-        except SidError as exc:
-            raise SidParseError(str(exc)) from exc
-        header = image.header
-        load = image.load
-        init = header.init_address or load + constants.DEFAULT_INIT_OFFSET
-        play = header.play_address or load + constants.DEFAULT_PLAY_OFFSET
-        return (
-            load,
-            init,
-            play,
-            header.name,
-            header.author,
-            header.released,
-            image.image,
-        )
-    # Bare .prg: 2-byte little-endian load address + image.
     try:
-        image = SidImage.from_prg(data)
+        image = SidImage.from_bytes(data)
     except SidError as exc:
         raise SidParseError(str(exc)) from exc
     load = image.load
-    return (
-        load,
-        load + constants.DEFAULT_INIT_OFFSET,
-        load + constants.DEFAULT_PLAY_OFFSET,
-        "",
-        "",
-        "",
-        image.image,
-    )
+    header = image.header
+    if header is None:
+        # Bare .prg: init = load, play = load + 6.
+        return (
+            load,
+            load + constants.DEFAULT_INIT_OFFSET,
+            load + constants.DEFAULT_PLAY_OFFSET,
+            "",
+            "",
+            "",
+            image.image,
+        )
+    init = header.init_address or load + constants.DEFAULT_INIT_OFFSET
+    play = header.play_address or load + constants.DEFAULT_PLAY_OFFSET
+    return (load, init, play, header.name, header.author, header.released, image.image)
 
 
 def parse(data: bytes) -> Song:
