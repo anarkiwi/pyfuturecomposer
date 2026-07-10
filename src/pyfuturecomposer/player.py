@@ -27,7 +27,7 @@ from pyfuturecomposer import constants
 from pyfuturecomposer.model import Song
 
 SID_REG_BASE = constants.SID_BASE
-NREG = constants.SID_REGISTERS
+NREG = constants.SID_REG_COUNT
 
 
 def _s8(value: int) -> int:

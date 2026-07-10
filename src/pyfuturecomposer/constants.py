@@ -12,21 +12,24 @@ disassembly is load-relative, so the constants here are OFFSETS-FROM-LOAD and th
 player reads/writes them at ``load + offset``.
 """
 
-# SID register map.
-SID_REGISTERS = 25
-VOICES = 3
-SID_BASE = 0xD400
+# SID register map and C64 frame timing are documented hardware facts owned by
+# the shared pysidtracker hardware-register surface; re-export them here for
+# back-compat (``SID_REGISTERS`` is the shared ``SID_REG_COUNT``).
+from pysidtracker import registers as _registers
+
+SID_BASE = _registers.SID_BASE
+SID_REG_COUNT = _registers.SID_REG_COUNT
+SID_VOICE_OFFSET = _registers.SID_VOICE_OFFSET
+# Pulse-width high registers carry only their low nibble (12-bit pulse).
+PW_HI_REGS = _registers.PW_HI_REGS
+PAL_CLOCK_HZ = _registers.PAL_CLOCK_HZ
+PAL_CYCLES_PER_FRAME = _registers.PAL_CYCLES_PER_FRAME
+NTSC_CLOCK_HZ = _registers.NTSC_CLOCK_HZ
+NTSC_CYCLES_PER_FRAME = _registers.NTSC_CYCLES_PER_FRAME
+
 MODE_VOL_REG = 0x18
 RES_FILT_REG = 0x17
 FC_HI_REG = 0x16
-# Pulse-width high registers carry only their low nibble (12-bit pulse).
-PW_HI_REGS = (0x03, 0x0A, 0x11)
-
-# C64 timing.  A PAL frame is 312 rasterlines x 63 cycles.
-PAL_CLOCK_HZ = 985248
-PAL_CYCLES_PER_FRAME = 19656
-NTSC_CLOCK_HZ = 1022727
-NTSC_CYCLES_PER_FRAME = 17095
 
 # Cycles between consecutive register writes within one frame (approximates the
 # store instructions of the 6502 playroutine).

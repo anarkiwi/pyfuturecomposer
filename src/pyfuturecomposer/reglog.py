@@ -1,87 +1,63 @@
 """SID register write logs (the shared py* register-surface convention).
 
 A register log is the player's output flattened to timed chip writes: one
-:class:`RegWrite` per SID register write, with an absolute clock in C64 CPU
-cycles.  Logs serialize to plain text, one ``clock reg val`` triple per line
-(decimal, space separated, ``#`` comments allowed).
+:class:`~pysidtracker.reglog.RegWrite` per SID register write, with an absolute
+clock in C64 CPU cycles.  The :class:`RegWrite` container plus the
+``read_reglog`` / ``write_reglog`` text (de)serializers and the per-frame
+``frame_writes`` framing loop are the shared :mod:`pysidtracker.reglog` surface,
+re-exported here; :func:`iter_register_writes` is the Future Composer wrapper that
+feeds the player's per-frame writes through that framer.
 """
 
-import io
-from pathlib import Path
-from typing import IO, Iterable, Iterator, NamedTuple
+from typing import Iterator
+
+from pysidtracker.reglog import (  # re-exported shared register-log surface
+    DEFAULT_WRITE_SPACING,
+    REGLOG_HEADER,
+    RegWrite,
+    frame_writes,
+    read_reglog,
+    write_reglog,
+)
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import iter_frames
 
-REGLOG_HEADER = "# pyfuturecomposer register log: clock reg val"
-
-
-class RegWrite(NamedTuple):
-    """One SID register write at an absolute CPU clock (in cycles)."""
-
-    clock: int
-    reg: int
-    val: int
+__all__ = [
+    "DEFAULT_WRITE_SPACING",
+    "REGLOG_HEADER",
+    "RegWrite",
+    "frame_writes",
+    "iter_register_writes",
+    "read_reglog",
+    "write_reglog",
+]
 
 
 def iter_register_writes(
     song: Song,
     max_frames: int = 50 * 60,
     cycles_per_frame: int = constants.PAL_CYCLES_PER_FRAME,
-    write_spacing: int = constants.DEFAULT_WRITE_SPACING,
+    write_spacing: int = DEFAULT_WRITE_SPACING,
 ) -> Iterator[RegWrite]:
     """Yield :class:`RegWrite` for ``song``, frame by frame.
 
     The Future Composer player loops forever, so ``max_frames`` bounds the log
-    (default one minute at 50 Hz).  Writes within a frame are spaced
-    ``write_spacing`` cycles from the frame boundary; frames are
+    (default one minute at 50 Hz).  The player already yields ``0..24`` register
+    offsets, so the per-frame writes go straight through the shared
+    :func:`~pysidtracker.reglog.frame_writes` framer (``sid_reg_base=0``): writes
+    within a frame are spaced ``write_spacing`` cycles apart and frames are
     ``cycles_per_frame`` apart -- the same framing the ``deplayroutine`` oracle
     uses, so the two are byte-comparable.
     """
-    if write_spacing * constants.SID_REGISTERS >= cycles_per_frame:
+    if write_spacing * constants.SID_REG_COUNT >= cycles_per_frame:
         raise FutureComposerError("write_spacing too large for one frame")
-    for frame, writes in enumerate(iter_frames(song, max_frames=max_frames)):
-        clock = frame * cycles_per_frame
-        for offset, (reg, val) in enumerate(writes):
-            yield RegWrite(clock + offset * write_spacing, reg, val)
-
-
-def write_reglog(writes: Iterable[RegWrite], dst, header: bool = True) -> None:
-    """Write a register log to a path or text file-like object."""
-
-    def _dump(out: IO[str]) -> None:
-        if header:
-            print(REGLOG_HEADER, file=out)
-        for write in writes:
-            print(f"{write.clock} {write.reg} {write.val}", file=out)
-
-    if isinstance(dst, (str, Path)):
-        with open(dst, "w", encoding="utf-8") as out:
-            _dump(out)
-        return
-    _dump(dst)
-
-
-def read_reglog(src) -> list[RegWrite]:
-    """Read a register log from a path or text file-like object."""
-    if isinstance(src, (str, Path)):
-        text = Path(src).read_text(encoding="utf-8")
-    elif isinstance(src, io.IOBase) or hasattr(src, "read"):
-        text = src.read()
-    else:
-        raise TypeError(f"cannot read a register log from {type(src).__name__}")
-    writes = []
-    for num, line in enumerate(text.splitlines(), start=1):
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        fields = line.split()
-        if len(fields) != 3:
-            raise FutureComposerError(f"bad register log line {num}: {line!r}")
-        try:
-            writes.append(RegWrite(*(int(field) for field in fields)))
-        except ValueError as exc:
-            raise FutureComposerError(f"bad register log line {num}: {line!r}") from exc
-    return writes
+    yield from frame_writes(
+        iter_frames(song, max_frames=max_frames),
+        cycles_per_frame=cycles_per_frame,
+        write_spacing=write_spacing,
+        sid_reg_base=0,
+        reg_count=constants.SID_REG_COUNT,
+    )

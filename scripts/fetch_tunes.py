@@ -7,6 +7,9 @@ These tunes are HVSC copyright works and are **never** committed to this repo
 machine-specific paths.  The byte-exact player tests skip when a tune is absent
 (and CI has no network), mirroring how the register-log oracle test is env-gated.
 
+The fetch / resolve mechanics are the shared :mod:`pysidtracker.testing` core;
+this script keeps only the Future Composer corpus mapping and the CLI.
+
 Usage::
 
     python scripts/fetch_tunes.py                # fetch every test tune
@@ -18,22 +21,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+from pysidtracker.testing import TuneFetchError, fetch_tune, resolve_tune
 
 REPO = Path(__file__).resolve().parent.parent
 CACHE = Path(os.environ.get("FC_TUNECACHE", str(REPO / "tests" / ".tunecache")))
-
-# Public HVSC mirror.  Override with ``$HVSC_MIRROR``.
-MIRROR = os.environ.get("HVSC_MIRROR", "https://hvsc.brona.dk/HVSC/C64Music").rstrip(
-    "/"
-)
-
-# Transient-failure retry policy for mirror fetches (attempts, fixed backoff).
-_FETCH_ATTEMPTS = 4
-_FETCH_BACKOFF = 2.0
 
 # id -> HVSC relative path.  We R Da Best (tune 2) is the decompile reference
 # (the tune the Future Composer player byte-exact validation was derived from).
@@ -42,44 +35,9 @@ TUNES = {
 }
 
 
-def _is_sid(data: bytes) -> bool:
-    return data[:4] in (b"PSID", b"RSID")
-
-
 def fetch(relpath: str, *, force: bool = False) -> Path:
     """Fetch ``relpath`` from the HVSC mirror into the cache; return its path."""
-    relpath = relpath.lstrip("/")
-    dest = CACHE / relpath
-    if dest.exists() and not force:
-        return dest
-    url = f"{MIRROR}/{relpath}"
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "pyfuturecomposer/fetch_tunes"}
-    )
-    data = None
-    last_exc = None
-    for attempt in range(_FETCH_ATTEMPTS):
-        try:
-            with urllib.request.urlopen(  # nosec B310 (https mirror)
-                req, timeout=60
-            ) as resp:
-                data = resp.read()
-            break
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:  # genuinely absent -- do not retry
-                raise
-            last_exc = exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            last_exc = exc
-        if attempt < _FETCH_ATTEMPTS - 1:
-            time.sleep(_FETCH_BACKOFF)
-    if data is None:
-        raise RuntimeError(f"{url}: fetch failed after retries: {last_exc}")
-    if not _is_sid(data):
-        raise RuntimeError(f"{url}: not a SID file (magic {data[:4]!r})")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return dest
+    return fetch_tune(relpath, cache_dir=CACHE, force=force)
 
 
 def fetch_id(tune_id: str, *, force: bool = False) -> Path:
@@ -88,23 +46,15 @@ def fetch_id(tune_id: str, *, force: bool = False) -> Path:
 
 
 def resolve(relpath: str) -> Path:
-    """Path to ``relpath`` from a local HVSC tree, the cache, or the mirror.
+    """Path to ``relpath`` from a local HVSC tree (``$HVSC``), the cache, or mirror.
 
-    Prefers a local HVSC checkout (``$HVSC``, e.g. ``.../C64Music``) so the
-    corpus test runs for real against a present tree; otherwise falls back to
-    the gitignored cache / the public mirror (``fetch``).  Raises if the tune
-    cannot be obtained anywhere.
+    Raises :class:`~pysidtracker.testing.TuneFetchError` if the tune cannot be
+    obtained anywhere (offline and uncached).
     """
-    relpath = relpath.lstrip("/")
-    hvsc = os.environ.get("HVSC")
-    if hvsc:
-        local = Path(hvsc) / relpath
-        if local.exists():
-            return local
-    cached = CACHE / relpath
-    if cached.exists():
-        return cached
-    return fetch(relpath)
+    path = resolve_tune(relpath, cache_dir=CACHE)
+    if path is None:
+        raise TuneFetchError(f"{relpath}: unavailable (offline, not cached)")
+    return path
 
 
 def main(argv=None) -> int:

@@ -3,6 +3,7 @@
 import io
 
 import pytest
+from pysidtracker import SidParseError
 
 from pyfuturecomposer import (
     FutureComposerError,
@@ -43,12 +44,12 @@ def test_reglog_path_round_trip(tmp_path, tune_path):
 
 
 def test_reglog_rejects_bad_line():
-    with pytest.raises(FutureComposerError):
+    with pytest.raises(SidParseError):
         read_reglog(io.StringIO("1 2\n"))
 
 
 def test_reglog_rejects_non_int():
-    with pytest.raises(FutureComposerError):
+    with pytest.raises(SidParseError):
         read_reglog(io.StringIO("a b c\n"))
 
 
