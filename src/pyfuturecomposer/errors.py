@@ -1,11 +1,13 @@
-"""Exceptions raised by pyfuturecomposer."""
+"""Exceptions raised by pyfuturecomposer.
 
-from pysidtracker import SidError
+The hierarchy is built by the shared :func:`pysidtracker.make_package_errors`, so
+:class:`FutureComposerError` roots at :class:`pysidtracker.SidError` and the parse
+error subclasses BOTH it and the base :class:`pysidtracker.SidParseError` (a base
+``except SidParseError`` still catches the package's own-named error).
+"""
 
+from pysidtracker import make_package_errors
 
-class FutureComposerError(SidError):
-    """Base class for all pyfuturecomposer errors."""
-
-
-class SidParseError(FutureComposerError):
-    """A PSID/PRG image (or byte string) could not be parsed."""
+FutureComposerError, SidParseError, SidFormatError = make_package_errors(
+    "FutureComposer"
+)

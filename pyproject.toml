@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfuturecomposer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pure-Python reader and player for Future Composer (MoN/Deenen) SID songs"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,17 +19,17 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
 ]
-dependencies = ["pysidtracker>=0.4"]
+dependencies = ["pysidtracker>=0.5"]
 
 [project.optional-dependencies]
 # Audio rendering drives an emulated SID via pyresidfp (pulled in by the shared
 # pysidtracker[audio] extra); everything else (read/play/register logs) is pure
 # stdlib on top of pysidtracker.
-audio = ["pysidtracker[audio]>=0.4"]
+audio = ["pysidtracker[audio]>=0.5"]
 dev = [
     "black>=24",
     "pylint>=3",
-    "pysidtracker[audio]>=0.4",
+    "pysidtracker[audio]>=0.5",
     "pytest>=7",
     "pytest-cov>=4",
     "pytest-xdist>=3",

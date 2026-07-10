@@ -11,8 +11,9 @@ from pathlib import Path
 
 from pysidtracker.audio import CHIP_MODELS, write_wav
 from pysidtracker.audio import render_samples as _render_samples
-from pysidtracker.audio import default_device, device_sampling_frequency
+from pysidtracker.audio import device_sampling_frequency, resolve_device
 from pysidtracker.errors import AudioUnavailable
+from pysidtracker.reglog import DEFAULT_WRITE_SPACING
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import FutureComposerError
@@ -37,16 +38,15 @@ def render_samples(
     mono.  Rendering stops at ``seconds`` (the player loops, so a duration is
     required).  The per-frame writes are framed by :mod:`pysidtracker.audio`.
     """
-    if model not in CHIP_MODELS:
-        raise FutureComposerError(f"chip model must be one of {CHIP_MODELS}")
-    if device is None:
-        try:
-            device = default_device(model, sampling_frequency)
-        except AudioUnavailable as exc:
-            raise FutureComposerError(
-                "pyresidfp is required to render audio; "
-                "install with: pip install pysidtracker[audio]"
-            ) from exc
+    try:
+        device = resolve_device(device, model, sampling_frequency)
+    except ValueError as exc:
+        raise FutureComposerError(str(exc)) from exc
+    except AudioUnavailable as exc:
+        raise FutureComposerError(
+            "pyresidfp is required to render audio; "
+            "install with: pip install pysidtracker[audio]"
+        ) from exc
     frame_seconds = cycles_per_frame / clock_frequency
     max_frames = max(1, round(seconds / frame_seconds))
     samples = _render_samples(
@@ -54,7 +54,7 @@ def render_samples(
         model=model,
         cycles_per_frame=cycles_per_frame,
         clock_frequency=clock_frequency,
-        write_spacing=constants.DEFAULT_WRITE_SPACING,
+        write_spacing=DEFAULT_WRITE_SPACING,
         device=device,
     )
     return samples, device_sampling_frequency(device)

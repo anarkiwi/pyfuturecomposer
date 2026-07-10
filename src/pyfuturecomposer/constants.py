@@ -27,13 +27,10 @@ PAL_CYCLES_PER_FRAME = _registers.PAL_CYCLES_PER_FRAME
 NTSC_CLOCK_HZ = _registers.NTSC_CLOCK_HZ
 NTSC_CYCLES_PER_FRAME = _registers.NTSC_CYCLES_PER_FRAME
 
-MODE_VOL_REG = 0x18
-RES_FILT_REG = 0x17
-FC_HI_REG = 0x16
-
-# Cycles between consecutive register writes within one frame (approximates the
-# store instructions of the 6502 playroutine).
-DEFAULT_WRITE_SPACING = 16
+# Global SID register indices ($D400-relative), from the shared register map.
+MODE_VOL_REG = _registers.MODE_VOL
+RES_FILT_REG = _registers.RES_FILT
+FC_HI_REG = _registers.FC_HI
 
 # Standard Future Composer entry points (the PSID header normally matches).
 DEFAULT_INIT_OFFSET = 0  # init = load

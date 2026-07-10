@@ -3,9 +3,13 @@
 import argparse
 import sys
 
+from pysidtracker.cli import add_reglog_command, add_wav_command, run_cli
+
 from pyfuturecomposer import audio, reglog, writer
 from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.reader import read
+
+_SONG_HELP = "Future Composer .sid/.prg file"
 
 
 def _info(args) -> None:
@@ -55,26 +59,16 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     info = commands.add_parser("info", help="print song metadata")
-    info.add_argument("song", help="Future Composer .sid/.prg file")
+    info.add_argument("song", help=_SONG_HELP)
     info.set_defaults(func=_info)
 
-    log = commands.add_parser("reglog", help="write a SID register log")
-    log.add_argument("song", help="Future Composer .sid/.prg file")
-    log.add_argument("output", help="register log file to write")
-    log.add_argument("--seconds", type=float, default=60.0)
-    log.set_defaults(func=_reglog)
-
-    wav = commands.add_parser("wav", help="render through an emulated SID")
-    wav.add_argument("song", help="Future Composer .sid/.prg file")
-    wav.add_argument("output", help="WAV file to write")
-    wav.add_argument("--seconds", type=float, default=60.0)
-    wav.add_argument("--model", choices=audio.CHIP_MODELS, default="8580")
-    wav.set_defaults(func=_wav)
+    add_reglog_command(commands, _reglog, song_help=_SONG_HELP)
+    add_wav_command(commands, _wav, song_help=_SONG_HELP)
 
     export = commands.add_parser(
         "export", help="write a form the FutureComposer editor can load"
     )
-    export.add_argument("song", help="Future Composer .sid/.prg file")
+    export.add_argument("song", help=_SONG_HELP)
     export.add_argument("output", help="output file (.prg editor module or .sid)")
     export.add_argument(
         "--format",
@@ -88,13 +82,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     """CLI entry point; returns a process exit code."""
-    args = _parser().parse_args(argv)
-    try:
-        args.func(args)
-    except (FutureComposerError, OSError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    return 0
+    return run_cli(_parser, FutureComposerError, argv)
 
 
 if __name__ == "__main__":
