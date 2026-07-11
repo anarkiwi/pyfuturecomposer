@@ -18,7 +18,7 @@ from pysidtracker.reglog import DEFAULT_WRITE_SPACING
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.model import Song
-from pyfuturecomposer.player import iter_frames
+from pyfuturecomposer.player import FutureComposerPlayer
 
 __all__ = ["CHIP_MODELS", "render_samples", "render_wav", "write_wav"]
 
@@ -50,7 +50,7 @@ def render_samples(
     frame_seconds = cycles_per_frame / clock_frequency
     max_frames = max(1, round(seconds / frame_seconds))
     samples = _render_samples(
-        iter_frames(song, max_frames=max_frames),
+        FutureComposerPlayer(song).iter_frames(max_frames),
         model=model,
         cycles_per_frame=cycles_per_frame,
         clock_frequency=clock_frequency,

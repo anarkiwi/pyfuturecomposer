@@ -2,34 +2,32 @@
 
 A register log is the player's output flattened to timed chip writes: one
 :class:`~pysidtracker.reglog.RegWrite` per SID register write, with an absolute
-clock in C64 CPU cycles.  The :class:`RegWrite` container plus the
-``read_reglog`` / ``write_reglog`` text (de)serializers and the per-frame
-``frame_writes`` framing loop are the shared :mod:`pysidtracker.reglog` surface,
-re-exported here; :func:`iter_register_writes` is the Future Composer wrapper that
-feeds the player's per-frame writes through that framer.
+clock in C64 CPU cycles.  The :class:`RegWrite` container, the ``read_reglog`` /
+``write_reglog`` text (de)serializers and the framing loop are the shared
+:mod:`pysidtracker.reglog` surface, re-exported here; :func:`iter_register_writes`
+drives the base :func:`~pysidtracker.reglog.register_writes_from_player` framer off
+a :class:`~pyfuturecomposer.player.FutureComposerPlayer`.
 """
 
-from typing import Iterator
+from typing import Iterator, Union
 
 from pysidtracker.reglog import (  # re-exported shared register-log surface
     DEFAULT_WRITE_SPACING,
     REGLOG_HEADER,
     RegWrite,
-    frame_writes,
     read_reglog,
+    register_writes_from_player,
     write_reglog,
 )
 
 from pyfuturecomposer import constants
-from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.model import Song
-from pyfuturecomposer.player import iter_frames
+from pyfuturecomposer.player import FutureComposerPlayer
 
 __all__ = [
     "DEFAULT_WRITE_SPACING",
     "REGLOG_HEADER",
     "RegWrite",
-    "frame_writes",
     "iter_register_writes",
     "read_reglog",
     "write_reglog",
@@ -37,27 +35,25 @@ __all__ = [
 
 
 def iter_register_writes(
-    song: Song,
+    source: Union[Song, bytes, FutureComposerPlayer],
     max_frames: int = 50 * 60,
     cycles_per_frame: int = constants.PAL_CYCLES_PER_FRAME,
     write_spacing: int = DEFAULT_WRITE_SPACING,
 ) -> Iterator[RegWrite]:
-    """Yield :class:`RegWrite` for ``song``, frame by frame.
+    """Yield :class:`RegWrite` for a Future Composer song, frame by frame.
 
-    The Future Composer player loops forever, so ``max_frames`` bounds the log
-    (default one minute at 50 Hz).  The player already yields ``0..24`` register
-    offsets, so the per-frame writes go straight through the shared
-    :func:`~pysidtracker.reglog.frame_writes` framer (``sid_reg_base=0``): writes
-    within a frame are spaced ``write_spacing`` cycles apart and frames are
-    ``cycles_per_frame`` apart -- the same framing the ``deplayroutine`` oracle
-    uses, so the two are byte-comparable.
+    The player loops forever, so ``max_frames`` bounds the log (default one minute
+    at 50 Hz).  The post-init SID baseline is emitted at clock 0 and each frame's
+    changed registers follow via the shared
+    :func:`~pysidtracker.reglog.register_writes_from_player` framer, so the log is
+    byte-comparable to the sidtrace oracle framing.  Raises
+    :class:`~pysidtracker.SidParseError` if ``write_spacing`` overruns one frame.
     """
-    if write_spacing * constants.SID_REG_COUNT >= cycles_per_frame:
-        raise FutureComposerError("write_spacing too large for one frame")
-    yield from frame_writes(
-        iter_frames(song, max_frames=max_frames),
-        cycles_per_frame=cycles_per_frame,
-        write_spacing=write_spacing,
-        sid_reg_base=0,
-        reg_count=constants.SID_REG_COUNT,
+    player = (
+        source
+        if isinstance(source, FutureComposerPlayer)
+        else FutureComposerPlayer(source)
+    )
+    return register_writes_from_player(
+        player, max_frames, cycles_per_frame, write_spacing
     )

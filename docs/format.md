@@ -34,18 +34,29 @@ operands, so this exporter does not re-relocate them to `$1800`.
 
 ## Player and playback notes
 
-The player is a faithful integer transcription of Future Composer's `entry_1806`
-6502 play routine: the tempo divider, the per-voice DEC-duration row advance,
-the opcode-stream SEQUENCE + PATTERN walks, and the dense per-frame modulation
-engine (slide-target vibrato / portamento, the `$E0` glide, a 16-bit pulse-width
-sweep, the filter-cutoff program and the wave / arp tables).
+`FutureComposerPlayer` is a `pysidtracker.MemPlayer`: the base owns the flat
+64 KiB 6502 memory, the `$D400` register snapshot/diff, and the `iter_frames` /
+`render_grid` drivers, while this package implements only FC's `_init` (clear the
+work bytes) and `_frame` (one tick). `_frame` is a faithful integer transcription
+of Future Composer's `entry_1806` 6502 play routine: the tempo divider, the
+per-voice DEC-duration row advance, the opcode-stream SEQUENCE + PATTERN walks,
+and the dense per-frame modulation engine (slide-target vibrato / portamento, the
+`$E0` glide, a 16-bit pulse-width sweep, the filter-cutoff program and the
+wave / arp tables).
 
 `iter_register_writes(song, max_frames=..) -> (clock, reg, val)` is the shared
-`py*` register-log surface (matching `pymusicassembler` / `pygoattracker`), so
-the output cross-validates byte-exact against the `deplayroutine` generic
-interpreter and the `preframr-sidtrace` oracle. It reproduces the
-`preframr-sidtrace` register oracle of the reverse-engineering reference tune
-*We R Da Best (tune 2)* (Warren Pilbrough / Jade Tiger) byte-exact.
+`py*` register-log surface (via `pysidtracker.reglog.register_writes_from_player`,
+matching `pymusicassembler` / `pygoattracker`).
+
+This is a transcription of a single MoN/FutureComposer player build -- the one
+derived from the reverse-engineering reference tune *We R Da Best (tune 2)*
+(Warren Pilbrough / Jade Tiger). `render_grid` reproduces the `sidtrace`
+`sidplayfp` register oracle for that build byte-exact (see
+[oracle testing](oracle-testing.md) and `tests/test_oracle_hvsc.py`). Detection
+of the broader FC family -- both player-code signatures, every load address, PSID
+and RSID -- is validated across a ~150-tune HVSC corpus in `tests/test_corpus.py`;
+other player builds place their inline tables at different offsets and are not
+reproduced by this transcription.
 
 ## References
 
