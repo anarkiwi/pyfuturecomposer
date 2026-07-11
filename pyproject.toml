@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfuturecomposer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pure-Python reader and player for Future Composer (MoN/Deenen) SID songs"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,20 +19,22 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
 ]
-dependencies = ["pysidtracker>=0.5"]
+dependencies = ["pysidtracker>=0.6.0"]
 
 [project.optional-dependencies]
 # Audio rendering drives an emulated SID via pyresidfp (pulled in by the shared
 # pysidtracker[audio] extra); everything else (read/play/register logs) is pure
 # stdlib on top of pysidtracker.
-audio = ["pysidtracker[audio]>=0.5"]
+audio = ["pysidtracker[audio]>=0.6.0"]
 dev = [
     "black>=24",
     "pylint>=3",
-    "pysidtracker[audio]>=0.5",
+    "pysidtracker[audio]>=0.6.0",
     "pytest>=7",
     "pytest-cov>=4",
     "pytest-xdist>=3",
+    # Decompress the sidtrace oracle's zstd CSV traces (oracle comparison tests).
+    "zstandard>=0.21",
 ]
 
 [project.scripts]
@@ -49,7 +51,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = "-ra"
+# Oracle comparison tests need Docker + network; run them in a dedicated CI job
+# via ``-m oracle`` (excluded from the default coverage matrix run).
+addopts = "-ra -n auto -m 'not oracle'"
+markers = ["oracle: byte-exact comparison against the sidtrace Docker oracle"]
 
 [tool.coverage.run]
 branch = true

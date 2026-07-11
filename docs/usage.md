@@ -9,12 +9,16 @@ import pyfuturecomposer as fc
 
 song = fc.read("tune.sid")            # PSID/.sid or bare .prg
 
-# Per-frame SID register writes (the writes the playroutine emits each frame).
-for writes in fc.iter_frames(song, max_frames=50 * 60):
+# The playroutine is a pysidtracker MemPlayer (accepts a Song, bytes, or .sid/.prg).
+player = fc.FutureComposerPlayer(song)
+
+# Per-frame SID register writes (frame 0 is the full 25-register file; later
+# frames are only the changed registers).
+for writes in player.iter_frames(50 * 60):
     ...                               # writes: list[(register, value)]
 
 # Forward-filled 25-register-per-frame snapshot grid (the oracle form).
-grid = fc.render_grid(song, nframes=400)
+grid = fc.FutureComposerPlayer(song).render_grid(400)
 
 # Register log (clock reg val triples), and WAV via an emulated SID.
 fc.write_reglog(fc.iter_register_writes(song, max_frames=2500), "tune.reglog")

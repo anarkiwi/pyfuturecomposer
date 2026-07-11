@@ -6,7 +6,6 @@ import pytest
 from pysidtracker import SidParseError
 
 from pyfuturecomposer import (
-    FutureComposerError,
     RegWrite,
     iter_register_writes,
     read,
@@ -60,7 +59,7 @@ def test_reglog_skips_comments_and_blanks():
 
 def test_reglog_write_spacing_guard(tune_path):
     song = read(tune_path)
-    with pytest.raises(FutureComposerError):
+    with pytest.raises(SidParseError):
         list(iter_register_writes(song, max_frames=1, write_spacing=10000))
 
 

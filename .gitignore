@@ -217,8 +217,10 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Music Assembler test tunes are HVSC copyright works -- never committed.
+# HVSC test tunes are copyright works, and the sidtrace oracle cache -- never
+# committed.
 tests/.tunecache/
+.oracle-cache/
 *.sid
 *.prg
 *.wav

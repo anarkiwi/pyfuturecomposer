@@ -25,9 +25,12 @@ import pyfuturecomposer as fc
 
 song = fc.read("tune.sid")            # path, bytes, or binary file object; .sid or .prg
 
-# Per-frame SID register writes the playroutine emits each frame.
-for writes in fc.iter_frames(song, max_frames=50 * 60):
+# The playroutine is a pysidtracker MemPlayer: per-frame SID register writes,
+# or a forward-filled 25-register grid.
+player = fc.FutureComposerPlayer(song)
+for writes in player.iter_frames(50 * 60):
     ...                               # writes: list[(register, value)]
+grid = fc.FutureComposerPlayer(song).render_grid(400)
 
 fc.write_prg(song, "tune.prg")        # export a module the FC editor can load
 ```

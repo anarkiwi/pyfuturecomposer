@@ -3,7 +3,7 @@
 from pyfuturecomposer.audio import render_samples, render_wav, write_wav
 from pyfuturecomposer.errors import FutureComposerError, SidParseError
 from pyfuturecomposer.model import Song
-from pyfuturecomposer.player import Player, iter_frames, render_grid
+from pyfuturecomposer.player import FutureComposerPlayer
 from pyfuturecomposer.reader import FutureComposerSidParser, parse, read
 from pyfuturecomposer.reglog import (
     RegWrite,
@@ -19,23 +19,21 @@ from pyfuturecomposer.writer import (
     write_sid,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "FutureComposerError",
+    "FutureComposerPlayer",
     "FutureComposerSidParser",
-    "Player",
     "RegWrite",
     "SidParseError",
     "Song",
     "__version__",
     "is_editor_native",
-    "iter_frames",
     "iter_register_writes",
     "parse",
     "read",
     "read_reglog",
-    "render_grid",
     "render_samples",
     "render_wav",
     "to_prg",

@@ -9,7 +9,7 @@ end-of-song / hard-freq paths -- exercising the real player code with crafted DA
 (no byte-exact oracle needed; the assertion is "the engine runs and emits writes").
 """
 
-from pyfuturecomposer import Player, Song, iter_register_writes
+from pyfuturecomposer import FutureComposerPlayer, Song, iter_register_writes
 from pyfuturecomposer import constants as c
 
 LOAD = 0x1800
@@ -57,7 +57,7 @@ def _build(master_ctrl, pattern, *, seq=(0x00, 0xFF), vib_ctrl=0x00, pw_ctrl=0x0
 
 
 def _run(song, frames=24):
-    player = Player(song)
+    player = FutureComposerPlayer(song)
     writes = []
     for _ in range(frames):
         writes.extend(player.play_frame())
@@ -127,7 +127,7 @@ def test_transpose_and_repeat_sequence_ops():
 def test_end_of_song_stops():
     # Sequence end-of-song ($fe) -> the player silences and stops.
     song = _build(0x00, _NOTE_PATTERN, seq=(0xFE,))
-    player = Player(song)
+    player = FutureComposerPlayer(song)
     for _ in range(8):
         player.play_frame()
     assert player.finished
