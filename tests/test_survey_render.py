@@ -9,7 +9,8 @@ import oracle_hvsc
 import pytest
 
 import pysidtracker
-from pysidtracker.cadence import playroutine_cadence
+from pysidtracker.cadence import Cadence, playroutine_cadence
+from pysidtracker.registers import PAL_CLOCK_HZ, PAL_CYCLES_PER_FRAME
 from pysidtracker.sidid import sidid_signatures
 
 from pyfuturecomposer import FutureComposerParseError, FutureComposerPlayer
@@ -37,6 +38,13 @@ def test_render_matches_player(tune_path):
         "trigger": "pal_video",
         "speed": 1,
     }
+
+
+def test_render_reports_unknown_trigger(tune_path, monkeypatch):
+    unknown = Cadence(PAL_CYCLES_PER_FRAME, None, PAL_CLOCK_HZ)
+    monkeypatch.setattr(oracle_hvsc, "playroutine_cadence", lambda *_, **__: unknown)
+    info = oracle_hvsc.render(tune_path.read_bytes(), 1, 1)[1]
+    assert (info["trigger"], info["speed"]) == (None, 1)
 
 
 def test_render_selects_one_based_subtune(tune_path, monkeypatch):

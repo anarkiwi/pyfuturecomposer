@@ -29,7 +29,7 @@ def render(data, song, nframes):
         "init": tune.init - tune.load,
         "play": tune.play - tune.load,
         "rsid": data[:4] == b"RSID",
-        "trigger": cadence.source.value,
+        "trigger": cadence.source and cadence.source.value,
         "speed": round(PAL_CYCLES_PER_FRAME / cadence.cycles_per_call),
     }
     grid = FutureComposerPlayer(tune, subtune=song - 1).render_grid(nframes)
