@@ -166,7 +166,7 @@ class FutureComposerPlayer(MemPlayer):
             cur = self.vget(0x0278, x)
             if cur in seen:
                 raise FutureComposerParseError(
-                    f"voice {x} sequence at ${seq_ptr:04X} never reaches a pattern"
+                    f"voice {x} sequence never reaches a pattern"
                 )
             seen.add(cur)
             b = self._rd(seq_ptr + cur)
@@ -207,7 +207,7 @@ class FutureComposerPlayer(MemPlayer):
         while True:
             if cur in seen:
                 raise FutureComposerParseError(
-                    f"voice {x} pattern at ${pat_ptr:04X} never reaches a note"
+                    f"voice {x} pattern never reaches a note"
                 )
             seen.add(cur)
             f8 = self._rd(pat_ptr + cur)
