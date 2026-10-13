@@ -17,9 +17,8 @@ from pathlib import Path
 
 import pytest
 
+import oracle_hvsc
 from pysidtracker import make_oracle_fixtures
-
-from pyfuturecomposer import FutureComposerPlayer
 
 # Cache under the workspace (a Docker-daemon-visible path, and what CI persists
 # via actions/cache).  ``$PYSIDTRACKER_ORACLE_CACHE`` overrides the location.
@@ -38,7 +37,7 @@ TUNES = {
 
 
 def _render(data, nframes):
-    return FutureComposerPlayer(data).render_grid(nframes)
+    return oracle_hvsc.render(data, 1, nframes)[0].tolist()
 
 
 tune_id, oracle_match = make_oracle_fixtures(

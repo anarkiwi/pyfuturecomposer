@@ -28,6 +28,7 @@ from pysidtracker import MemPlayer
 from pysidtracker.mos6502 import adc, s8, sbc
 
 from pyfuturecomposer import constants
+from pyfuturecomposer.errors import FutureComposerParseError
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.reader import parse
 
@@ -160,8 +161,14 @@ class FutureComposerPlayer(MemPlayer):
         self._sustain(x)
 
     def _sequence_walk(self, x: int, seq_ptr: int) -> None:
+        seen = set()
         while True:
             cur = self.vget(0x0278, x)
+            if cur in seen:
+                raise FutureComposerParseError(
+                    f"voice {x} sequence never reaches a pattern"
+                )
+            seen.add(cur)
             b = self._rd(seq_ptr + cur)
             if b == constants.SEQ_END:  # 1874 end of song
                 self._silence()
@@ -196,7 +203,13 @@ class FutureComposerPlayer(MemPlayer):
 
     def _pattern_walk(self, x: int, pat_ptr: int) -> None:
         cur = self.vget(0x027B, x)
+        seen = set()
         while True:
+            if cur in seen:
+                raise FutureComposerParseError(
+                    f"voice {x} pattern never reaches a note"
+                )
+            seen.add(cur)
             f8 = self._rd(pat_ptr + cur)
             self._wr(0x00F8, f8)
             if (f8 & 0xF0) == 0xF0:  # row-set end marker (next byte is the note)

@@ -2,7 +2,7 @@
 
 Thin Future Composer wrappers over the shared :mod:`pysidtracker.audio` renderer.
 By default the emulated SID is `pyresidfp <https://pypi.org/project/pyresidfp/>`_
-(install ``pysidtracker[audio]``).  Any object with ``write_register(reg, value)``,
+(a core pysidtracker dependency).  Any object with ``write_register(reg, value)``,
 ``clock(timedelta) -> samples`` and a ``sampling_frequency`` attribute can be
 passed as ``device`` instead (e.g. for tests or a different emulator).
 """
@@ -45,7 +45,7 @@ def render_samples(
     except AudioUnavailable as exc:
         raise FutureComposerError(
             "pyresidfp is required to render audio; "
-            "install with: pip install pysidtracker[audio]"
+            "install with: pip install pyresidfp"
         ) from exc
     frame_seconds = cycles_per_frame / clock_frequency
     max_frames = max(1, round(seconds / frame_seconds))

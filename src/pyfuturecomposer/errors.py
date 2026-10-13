@@ -1,13 +1,20 @@
-"""Exceptions raised by pyfuturecomposer.
+"""Exceptions for pyfuturecomposer, built by :func:`pysidtracker.make_package_errors`.
 
-The hierarchy is built by the shared :func:`pysidtracker.make_package_errors`, so
-:class:`FutureComposerError` roots at :class:`pysidtracker.SidError` and the parse
-error subclasses BOTH it and the base :class:`pysidtracker.SidParseError` (a base
-``except SidParseError`` still catches the package's own-named error).
+``FutureComposerParseError`` subclasses both ``FutureComposerError`` and
+:class:`pysidtracker.SidParseError` ("not a decodable Future Composer tune");
+``SidParseError`` is kept as its backward-compatible alias.
 """
 
 from pysidtracker import make_package_errors
 
-FutureComposerError, SidParseError, SidFormatError = make_package_errors(
+FutureComposerError, FutureComposerParseError, SidFormatError = make_package_errors(
     "FutureComposer"
 )
+SidParseError = FutureComposerParseError
+
+__all__ = [
+    "FutureComposerError",
+    "FutureComposerParseError",
+    "SidFormatError",
+    "SidParseError",
+]

@@ -9,7 +9,14 @@ end-of-song / hard-freq paths -- exercising the real player code with crafted DA
 (no byte-exact oracle needed; the assertion is "the engine runs and emits writes").
 """
 
-from pyfuturecomposer import FutureComposerPlayer, Song, iter_register_writes
+import pytest
+
+from pyfuturecomposer import (
+    FutureComposerParseError,
+    FutureComposerPlayer,
+    Song,
+    iter_register_writes,
+)
 from pyfuturecomposer import constants as c
 
 LOAD = 0x1800
@@ -17,7 +24,7 @@ LOAD = 0x1800
 
 def _blank_image() -> bytearray:
     # Cover load..$1f29 (the inline-table region) so every table read is in-image.
-    img = bytearray(0x729 + c.INSTR_RECORD_SIZE * 4)
+    img = bytearray(0x800)
     return img
 
 
@@ -137,3 +144,19 @@ def test_reglog_on_synthetic():
     song = _build(0x01, _NOTE_PATTERN)
     writes = list(iter_register_writes(song, max_frames=16))
     assert writes
+
+
+@pytest.mark.parametrize(
+    "seq", [(c.SEQ_LOOP,), (c.SEQ_TRANSPOSE | 1,) * 5 + (c.SEQ_LOOP,)]
+)
+def test_sequence_without_pattern_raises_parse_error(seq):
+    with pytest.raises(FutureComposerParseError, match="sequence"):
+        _run(_build(0x00, _NOTE_PATTERN, seq=seq), frames=2)
+
+
+def test_pattern_without_note_raises_parse_error():
+    song = _build(0x00, _NOTE_PATTERN)
+    img = bytearray(song.image) + bytes([c.DUR_MIN | 1]) * 0x100
+    _put16(img, c.OFF_PAT_PTR, LOAD + len(song.image))
+    with pytest.raises(FutureComposerParseError, match="pattern"):
+        _run(Song(image=bytes(img), load=LOAD, init=LOAD, play=LOAD + 6), frames=2)

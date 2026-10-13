@@ -1,7 +1,11 @@
 """Read, play, and render Future Composer (MoN / Deenen) SID songs."""
 
 from pyfuturecomposer.audio import render_samples, render_wav, write_wav
-from pyfuturecomposer.errors import FutureComposerError, SidParseError
+from pyfuturecomposer.errors import (
+    FutureComposerError,
+    FutureComposerParseError,
+    SidParseError,
+)
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import FutureComposerPlayer
 from pyfuturecomposer.reader import FutureComposerSidParser, parse, read
@@ -19,10 +23,11 @@ from pyfuturecomposer.writer import (
     write_sid,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "FutureComposerError",
+    "FutureComposerParseError",
     "FutureComposerPlayer",
     "FutureComposerSidParser",
     "RegWrite",
