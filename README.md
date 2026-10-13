@@ -14,8 +14,7 @@ headers are not trusted.
 ## Install
 
 ```bash
-pip install pyfuturecomposer          # reader/player/reglog (pure stdlib)
-pip install pyfuturecomposer[audio]   # + WAV rendering via pyresidfp
+pip install pyfuturecomposer   # reader/player/reglog, WAV rendering via pyresidfp
 ```
 
 ## Usage
@@ -37,7 +36,8 @@ fc.write_prg(song, "tune.prg")        # export a module the FC editor can load
 
 See [docs/usage.md](docs/usage.md) for the register grid, register logs, WAV
 rendering, and the command line, and [docs/format.md](docs/format.md) for the
-format, playroutine, and byte-exact validation.
+format, playroutine, and byte-exact validation, and
+[docs/oracle-testing.md](docs/oracle-testing.md) for the whole-HVSC oracle survey.
 
 ## Development
 

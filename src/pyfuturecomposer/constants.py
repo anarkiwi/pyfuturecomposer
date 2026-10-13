@@ -42,6 +42,7 @@ DEFAULT_PLAY_OFFSET = 6  # play = load + 6
 # load address (relocation-safe -- the same offsets work for any load address).
 # Derived directly from the disassembly (subtract $1800 from the absolute addr).
 # ---------------------------------------------------------------------------
+OFF_SIGNATURE = 0x1AF  # $19af row/duration-advance code the recogniser anchors on
 OFF_FREQ_LO = 0x5AB  # $1dab note freq-lo table (also the slide-target base)
 OFF_FREQ_HI = 0x60B  # $1e0b note freq-hi table
 OFF_SEQ_LO = 0x6EC  # $1eec per-voice sequence pointer table, low bytes
