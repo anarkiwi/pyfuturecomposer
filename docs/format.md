@@ -46,7 +46,9 @@ wave / arp tables).
 
 `iter_register_writes(song, max_frames=..) -> (clock, reg, val)` is the shared
 `py*` register-log surface (via `pysidtracker.reglog.register_writes_from_player`,
-matching `pymusicassembler` / `pygoattracker`).
+matching `pymusicassembler` / `pygoattracker`). The player sets `MASK_PW_HI`, so
+both it and the grid carry only the low nibble of the pulse-width-high registers
+(`$D403/$D40A/$D411`), the bits the SID uses.
 
 This is a transcription of a single MoN/FutureComposer player build -- the one
 derived from the reverse-engineering reference tune *We R Da Best (tune 2)*

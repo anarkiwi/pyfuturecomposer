@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfuturecomposer"
-version = "0.5.0"
+version = "0.5.1"
 description = "Pure-Python reader and player for Future Composer (MoN/Deenen) SID songs"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
 ]
-dependencies = ["pysidtracker>=0.34.0"]
+dependencies = ["pysidtracker>=0.35.0"]
 
 [project.optional-dependencies]
 dev = [

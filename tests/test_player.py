@@ -1,6 +1,8 @@
 """Player unit tests (byte-exact oracle validation lives in test_oracle_hvsc.py)."""
 
-from pyfuturecomposer import FutureComposerPlayer, read
+from pysidtracker import PW_HI_REGS, grid_from_writes
+
+from pyfuturecomposer import FutureComposerPlayer, iter_register_writes, read
 
 NREG = 25
 
@@ -34,10 +36,14 @@ def test_player_is_deterministic(tune_path):
 
 
 def test_pw_high_masked_to_nibble(tune_path):
-    grid = FutureComposerPlayer(read(tune_path)).render_grid(64)
+    song = read(tune_path)
+    grid = FutureComposerPlayer(song).render_grid(64)
     for row in grid:
-        for reg in (0x03, 0x0A, 0x11):
+        for reg in PW_HI_REGS:
             assert row[reg] <= 0x0F
+    writes = list(iter_register_writes(song, max_frames=64))
+    assert all(w.val <= 0x0F for w in writes if w.reg in PW_HI_REGS)
+    assert grid_from_writes([(w.clock, w.reg, w.val) for w in writes]) == grid
 
 
 def test_two_players_independent(tune_path):
