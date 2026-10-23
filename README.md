@@ -35,9 +35,10 @@ fc.write_prg(song, "tune.prg")        # export a module the FC editor can load
 ```
 
 See [docs/usage.md](docs/usage.md) for the register grid, register logs, WAV
-rendering, and the command line, and [docs/format.md](docs/format.md) for the
-format, playroutine, and byte-exact validation, and
-[docs/oracle-testing.md](docs/oracle-testing.md) for the whole-HVSC oracle survey.
+rendering, and the `pysidtracker info|reglog|wav|export` command line, and
+[docs/format.md](docs/format.md) for the format, playroutine, and byte-exact
+validation, and [docs/oracle-testing.md](docs/oracle-testing.md) for the
+whole-HVSC oracle survey.
 
 ## Development
 
