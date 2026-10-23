@@ -10,12 +10,9 @@ passed as ``device`` instead (e.g. for tests or a different emulator).
 from pathlib import Path
 
 from pysidtracker.audio import CHIP_MODELS, write_wav
-from pysidtracker.audio import render_samples as _render_samples
-from pysidtracker.audio import device_sampling_frequency, resolve_device
+from pysidtracker.audio import render_player_samples, resolve_device
 from pysidtracker.errors import AudioUnavailable
-from pysidtracker.reglog import DEFAULT_WRITE_SPACING
 
-from pyfuturecomposer import constants
 from pyfuturecomposer.errors import FutureComposerError
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import FutureComposerPlayer
@@ -29,17 +26,19 @@ def render_samples(
     model: str = "8580",
     sampling_frequency=None,
     device=None,
-    cycles_per_frame: int = constants.PAL_CYCLES_PER_FRAME,
-    clock_frequency: float = constants.PAL_CLOCK_HZ,
+    **options,
 ):
     """Render ``song`` on an emulated SID.
 
     Returns ``(samples, sampling_frequency)`` where samples are signed 16-bit
     mono.  Rendering stops at ``seconds`` (the player loops, so a duration is
-    required).  The per-frame writes are framed by :mod:`pysidtracker.audio`.
+    required).  ``options`` (``cycles_per_frame``, ``clock_frequency``,
+    ``progress``, ...) are :func:`pysidtracker.audio.render_player_samples`'s.
     """
     try:
-        device = resolve_device(device, model, sampling_frequency)
+        device = resolve_device(
+            device, model, sampling_frequency, options.get("clock_frequency")
+        )
     except ValueError as exc:
         raise FutureComposerError(str(exc)) from exc
     except AudioUnavailable as exc:
@@ -47,17 +46,13 @@ def render_samples(
             "pyresidfp is required to render audio; "
             "install with: pip install pyresidfp"
         ) from exc
-    frame_seconds = cycles_per_frame / clock_frequency
-    max_frames = max(1, round(seconds / frame_seconds))
-    samples = _render_samples(
-        FutureComposerPlayer(song).iter_frames(max_frames),
+    return render_player_samples(
+        FutureComposerPlayer(song),
+        seconds=seconds,
         model=model,
-        cycles_per_frame=cycles_per_frame,
-        clock_frequency=clock_frequency,
-        write_spacing=DEFAULT_WRITE_SPACING,
         device=device,
+        **options,
     )
-    return samples, device_sampling_frequency(device)
 
 
 def render_wav(song: Song, dst, seconds: float = 60.0, **options) -> Path:

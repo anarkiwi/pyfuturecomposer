@@ -1,16 +1,14 @@
 """Reader tests: PSID/PRG container parsing into a Song."""
 
-import struct
-
 import pytest
+
+from pysidtracker.header import write_psid
 
 from pyfuturecomposer import SidParseError, parse, read
 
 
 def _psid(image: bytes, load=0x1800, init=0x1800, play=0x1806) -> bytes:
-    header = struct.pack(">4sHHHHHHHI", b"PSID", 2, 0x7C, load, init, play, 1, 0, 0)
-    header += b"\0" * (0x7C - len(header))
-    return header + image
+    return write_psid(load=load, init=init, play=play, image=image)
 
 
 def test_parse_psid_metadata():
@@ -32,9 +30,7 @@ def test_parse_prg_load_address():
 
 def test_parse_embedded_load_address():
     # data_off load field 0 -> load is the first 2 body bytes.
-    header = struct.pack(">4sHHHHHHHI", b"PSID", 2, 0x7C, 0, 0, 0, 1, 0, 0)
-    header += b"\0" * (0x7C - len(header))
-    song = parse(header + b"\x00\x18" + b"\x42")
+    song = parse(_psid(b"\x00\x18\x42", load=0, init=0, play=0))
     assert song.load == 0x1800
     assert song.byte(0x1800) == 0x42
 

@@ -9,20 +9,15 @@ cache (or a local ``$HVSC`` tree), never committed.
 
 The reusable ``pysidtracker.make_oracle_fixtures`` renders each tune with the FC
 player and asserts the per-frame SID register grid matches the sidtrace
-``sidplayfp`` oracle frame for frame (see ``docs/oracle-testing.md``).
+``sidplayfp`` oracle frame for frame, a mismatch failing with the whydiff
+explanation (see ``docs/oracle-testing.md``).
 """
-
-import os
-from pathlib import Path
 
 import pytest
 
-import oracle_hvsc
 from pysidtracker import make_oracle_fixtures
 
-# Cache under the workspace (a Docker-daemon-visible path, and what CI persists
-# via actions/cache).  ``$PYSIDTRACKER_ORACLE_CACHE`` overrides the location.
-_CACHE = Path(os.environ.get("PYSIDTRACKER_ORACLE_CACHE", ".oracle-cache"))
+from pyfuturecomposer import FutureComposerPlayer
 
 # HVSC Future Composer tunes verified to render byte-exactly against the
 # deterministic sidtrace oracle.  The FC playroutine here is a faithful
@@ -36,16 +31,8 @@ TUNES = {
 }
 
 
-def _render(data, nframes):
-    return oracle_hvsc.render(data, 1, nframes)[0].tolist()
-
-
 tune_id, oracle_match = make_oracle_fixtures(
-    TUNES,
-    hvsc_cache=_CACHE / "hvsc",
-    oracle_cache=_CACHE / "csv",
-    render=_render,
-    frames=250,
+    TUNES, player=FutureComposerPlayer, frames=250
 )
 
 

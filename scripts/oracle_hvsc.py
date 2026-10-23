@@ -7,8 +7,7 @@
 import numpy as np
 
 from pysidtracker import SidImage
-from pysidtracker.cadence import playroutine_cadence
-from pysidtracker.registers import PAL_CYCLES_PER_FRAME
+from pysidtracker.cadence import cadence_info
 
 from pyfuturecomposer import FutureComposerPlayer, FutureComposerSidParser, parse
 from pyfuturecomposer.constants import OFF_SIGNATURE
@@ -23,14 +22,11 @@ def render(data, song, nframes):
     anchor = FutureComposerSidParser().recognize(SidImage.from_bytes(data))
     if anchor is None:
         raise FutureComposerParseError("no Future Composer player signature")
-    cadence = playroutine_cadence(data, subtune=song - 1)
     info = {
         "layout": anchor - tune.load - OFF_SIGNATURE,
         "init": tune.init - tune.load,
         "play": tune.play - tune.load,
-        "rsid": data[:4] == b"RSID",
-        "trigger": cadence.source and cadence.source.value,
-        "speed": round(PAL_CYCLES_PER_FRAME / cadence.cycles_per_call),
+        **cadence_info(data, song),
     }
     grid = FutureComposerPlayer(tune, subtune=song - 1).render_grid(nframes)
     return np.asarray(grid, np.int16), info

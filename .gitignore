@@ -217,12 +217,15 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# HVSC test tunes are copyright works, and the sidtrace oracle cache -- never
-# committed.
-tests/.tunecache/
-.oracle-cache/
+# pysidtracker's download cache (HVSC tunes, oracle traces): copyright works,
+# never committed.
+.tunecache/
 *.sid
 *.prg
 *.wav
 *.sidwr.bin
 .hvsc-survey/
+
+# Core dumps
+/core
+core.[0-9]*

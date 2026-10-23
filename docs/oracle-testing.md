@@ -8,22 +8,23 @@ compare machinery is the shared base (see the base package's
 [oracle-testing docs](https://github.com/anarkiwi/pysidtracker/blob/main/docs/oracle-testing.md)).
 
 ```python
-import oracle_hvsc  # scripts/oracle_hvsc.py
-
-def _render(data, nframes):
-    return oracle_hvsc.render(data, 1, nframes)[0].tolist()
+tune_id, oracle_match = make_oracle_fixtures(
+    TUNES, player=FutureComposerPlayer, frames=250
+)
 ```
 
-The test renders through the same `scripts/oracle_hvsc.py` path as the survey
-below.
+A mismatch fails with pysidtracker's
+[whydiff](https://github.com/anarkiwi/pysidtracker/blob/main/docs/whydiff.md)
+report: the diverging cell and the Python lines and 6502 instructions its value
+came from, side by side.
 
 - **Marked `oracle`**, excluded from the default suite (`-m 'not oracle'`); a
   dedicated CI job runs `pytest -m oracle -n auto` with Docker.
 - **Never skipped**: an unavailable tune raises `TuneFetchError` and a failed
   oracle render raises `SidtraceUnavailable`, so a broken download or render
   fails the test instead of hiding a regression.
-- HVSC `.sid` files are copyright works: downloaded to `.oracle-cache/` (or a
-  local `$HVSC` tree), never committed.
+- HVSC `.sid` files are copyright works: downloaded to pysidtracker's
+  `.tunecache` (or read from a local `$HVSC` tree), never committed.
 
 ## Coverage
 
@@ -42,12 +43,13 @@ of every HVSC tune SIDId names `MoN/FutureComposer` (`PLAYER`). Its `info`
 reports the decoded build: `layout` (offset of the recognised player signature
 from where the transcribed build has it, `constants.OFF_SIGNATURE`; nonzero means
 the inline tables sit elsewhere), the `init` and `play` entry offsets from the
-load address, `rsid`, and the play `trigger` and `speed` (calls per PAL frame). A
+load address, and `pysidtracker.cadence.cadence_info`'s `rsid`, play `trigger`,
+`speed` (calls per PAL frame) and `dynamic`. A
 tune without the FC player signature raises `FutureComposerParseError` (a
 `pysidtracker.SidParseError`), which the survey records as `not_decompiled`.
 
 ```bash
-pip install "pysidtracker[survey]>=0.12.0"
+pip install "pysidtracker[survey]>=0.30.0"
 python -m pysidtracker.survey find $HVSC --player '^mon/futurecomposer$' --out .hvsc-survey/tunes.csv
 PYTHONPATH=scripts python -m pysidtracker.survey run $HVSC .hvsc-survey/tunes.csv \
     --work .hvsc-survey --render oracle_hvsc:render --jobs 32
