@@ -36,7 +36,14 @@ SID_REG_BASE = constants.SID_BASE
 
 
 class FutureComposerPlayer(MemPlayer):
-    """The Future Composer ``entry_1806`` per-frame player over a parsed :class:`Song`."""
+    """The Future Composer ``entry_1806`` per-frame player over a parsed :class:`Song`.
+
+    FC stores a full byte to the pulse-width-high registers but the SID uses only
+    their low nibble, so :attr:`~pysidtracker.MemPlayer.MASK_PW_HI` masks them in
+    every snapshot: the grid and the register log both carry the bits the SID uses.
+    """
+
+    MASK_PW_HI = True
 
     def __init__(self, source: Union[Song, bytes, bytearray], subtune: int = 0):
         song = source if isinstance(source, Song) else parse(bytes(source))
@@ -66,19 +73,6 @@ class FutureComposerPlayer(MemPlayer):
         self.a_wave_self = load + c.OFF_WAVE_PROG_SELF
         self.finished = False
         super().__init__(song.image, load, subtune)
-
-    def render_grid(self, nframes: int) -> "list[list[int]]":
-        """Per-frame 25-register grid, nibble-masking the 4-bit pulse-width-high regs.
-
-        FC stores a full byte to ``$D403/$D40A/$D411`` but the SID uses only the low
-        nibble; the sidtrace oracle framer masks these, so mask them here to keep the
-        grid byte-comparable.
-        """
-        rows = super().render_grid(nframes)
-        for row in rows:
-            for pw_hi in constants.PW_HI_REGS:
-                row[pw_hi] &= 0x0F
-        return rows
 
     def vget(self, base: int, x: int) -> int:
         """Read voice ``x``'s byte from the work array based at ``base``."""
