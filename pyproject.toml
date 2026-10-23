@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfuturecomposer"
-version = "0.4.0"
+version = "0.5.0"
 description = "Pure-Python reader and player for Future Composer (MoN/Deenen) SID songs"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
 ]
-dependencies = ["pysidtracker>=0.32.0"]
+dependencies = ["pysidtracker>=0.34.0"]
 
 [project.optional-dependencies]
 dev = [
@@ -31,8 +31,8 @@ dev = [
     "pytest-xdist>=3",
 ]
 
-[project.scripts]
-pyfuturecomposer = "pyfuturecomposer.cli:main"
+[project.entry-points."pysidtracker.formats"]
+futurecomposer = "pyfuturecomposer.formats:FORMAT"
 
 [project.urls]
 Homepage = "https://github.com/anarkiwi/pyfuturecomposer"

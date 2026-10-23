@@ -46,10 +46,16 @@ fc.to_prg(song)                       # -> bytes
 
 ## Command line
 
+Installing pyfuturecomposer registers the `futurecomposer` format with the shared
+`pysidtracker` command, which recognises Future Composer tunes by content:
+
 ```bash
-pyfuturecomposer info   tune.sid
-pyfuturecomposer reglog tune.sid tune.reglog --seconds 30
-pyfuturecomposer wav    tune.sid tune.wav --seconds 30 --model 8580
-pyfuturecomposer export tune.sid tune.prg          # editor module (.prg or .sid by extension)
-pyfuturecomposer export tune.sid out.bin --format sid
+pysidtracker info   tune.sid
+pysidtracker reglog tune.sid tune.reglog --seconds 30
+pysidtracker wav    tune.sid tune.wav --seconds 30 --model 8580
+pysidtracker export tune.sid tune.prg          # editor module (.prg or .sid by extension)
+pysidtracker export tune.sid out.bin --format sid
 ```
+
+`export` of a relocated rip to `.prg` notes on stderr that only the `$1800`
+build loads into the editor.
