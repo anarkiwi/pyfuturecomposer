@@ -2,30 +2,24 @@
 
 A deterministic representative sample of MoN/FutureComposer HVSC tunes (paths in
 ``tests/fixtures/fc_corpus.txt`` -- copyright tunes are never committed) is each
-resolved from a local HVSC tree (``$HVSC``) or the fetch mirror and asserted to
-(1) parse into a :class:`~pyfuturecomposer.Song` and (2) classify as
+resolved by pysidtracker's ``hvsc`` fixture (a local ``$HVSC`` tree, the shared
+tune cache, else the HVSC mirror) and asserted to (1) parse into a
+:class:`~pyfuturecomposer.Song` and (2) classify as
 :attr:`~pysidtracker.detect.PlayroutineKind.DIRECT` via the static player
-signature.  Each tune skips cleanly when it cannot be obtained (offline CI), so
-the test SKIPs without a corpus and RUNs for real against ``$HVSC``.
+signature.  An unreachable tune fails.
 
 The synthetic recogniser tests below always run: they exercise
 :meth:`FutureComposerSidParser.recognize` on crafted images without needing HVSC.
 """
 
-import struct
-import sys
 from pathlib import Path
 
 import pytest
 
 from pysidtracker.detect import PlayroutineKind
+from pysidtracker.header import write_psid
 
 from pyfuturecomposer import FutureComposerSidParser, parse
-
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "scripts"))
-
-import fetch_tunes  # noqa: E402  (after sys.path tweak)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -43,20 +37,13 @@ CORPUS = _load_corpus()
 
 
 def _psid(image: bytes, load=0x1800, init=0x1800, play=0x1806) -> bytes:
-    header = struct.pack(">4sHHHHHHHI", b"PSID", 2, 0x7C, load, init, play, 1, 0, 0)
-    header += b"\0" * (0x7C - len(header))
-    return header + image
+    return write_psid(load=load, init=init, play=play, image=image)
 
 
 @pytest.fixture(params=CORPUS)
-def corpus_tune(request):
-    """Resolve a corpus tune path to bytes, skipping if unavailable."""
-    rel = request.param
-    try:
-        path = fetch_tunes.resolve(rel)
-    except Exception:  # pylint: disable=broad-except  # offline -> skip
-        pytest.skip(f"corpus tune unavailable (offline, not cached): {rel}")
-    return rel, path.read_bytes()
+def corpus_tune(request, hvsc):
+    """A corpus tune's relpath and bytes (pysidtracker's ``hvsc`` fixture)."""
+    return request.param, hvsc.read(request.param)
 
 
 def test_corpus_parses_and_detects_direct(corpus_tune):

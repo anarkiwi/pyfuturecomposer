@@ -1,5 +1,7 @@
 """CLI tests."""
 
+import wave
+
 import pytest
 
 from pyfuturecomposer import cli, parse, read
@@ -17,6 +19,13 @@ def test_reglog(tmp_path, tune_path):
     assert cli.main(["reglog", str(tune_path), str(out), "--seconds", "0.2"]) == 0
     assert out.exists()
     assert out.read_text(encoding="utf-8").strip()
+
+
+def test_wav(tmp_path, tune_path):
+    out = tmp_path / "out.wav"
+    assert cli.main(["wav", str(tune_path), str(out), "--seconds", "0.1"]) == 0
+    with wave.open(str(out)) as wav:
+        assert wav.getnframes() > 0
 
 
 def test_reglog_error(tmp_path):

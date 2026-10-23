@@ -25,26 +25,19 @@ jobs:
         run: black --check src/pyfuturecomposer tests scripts
       - name: pylint
         run: pylint src/pyfuturecomposer tests scripts
-      - name: Cache HVSC tunes
-        # HVSC tunes are copyright and never committed; the corpus/player tests
-        # fetch them from the mirror into a gitignored cache.  Cache that dir
-        # across runs, keyed on the corpus list + fetch script so a changed
-        # sample invalidates it.
-        uses: actions/cache@v6
+      - uses: anarkiwi/pysidtracker/.github/actions/cache@v0.32.0
         with:
-          path: tests/.tunecache
-          key: hvsc-tunes-${{ hashFiles('tests/fixtures/fc_corpus.txt', 'scripts/fetch_tunes.py') }}
+          key: ${{ hashFiles('tests/fixtures/fc_corpus.txt', 'tests/*.py') }}
+          tunes: tests tests/fixtures/fc_corpus.txt
       - name: pytest + coverage (> 85%)
         # Excludes the byte-exact ``oracle`` tests (dedicated job below); those
-        # need Docker.  Tune-dependent tests fetch from the HVSC mirror into the
-        # cached tunecache, skipping an individual tune only if truly unreachable.
+        # need Docker.
         run: pytest -n auto --cov=pyfuturecomposer --cov-report=term-missing --cov-fail-under=85
 
   oracle:
     # Byte-exact comparison of the FutureComposerPlayer render against the
     # sidtrace sidplayfp oracle over real HVSC tunes.  Never skipped: a failed
-    # HVSC download or oracle render fails the job.  HVSC tunes and oracle CSVs
-    # are cached.
+    # HVSC download or oracle render fails the job.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -56,23 +49,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-      - name: Pull sidtrace oracle image
-        id: image
-        run: |
-          docker pull anarkiwi/sidtrace:latest
-          digest=$(docker inspect --format '{{index .RepoDigests 0}}' anarkiwi/sidtrace:latest)
-          echo "digest=${digest##*@}" >> "$GITHUB_OUTPUT"
-      - name: Cache HVSC tunes
-        uses: actions/cache@v6
+      - uses: anarkiwi/pysidtracker/.github/actions/cache@v0.32.0
         with:
-          path: .oracle-cache/hvsc
-          key: oracle-hvsc-${{ hashFiles('tests/test_oracle_hvsc.py') }}
-          restore-keys: oracle-hvsc-
-      - name: Cache oracle CSVs
-        uses: actions/cache@v6
-        with:
-          path: .oracle-cache/csv
-          key: oracle-csv-${{ steps.image.outputs.digest }}-${{ hashFiles('tests/test_oracle_hvsc.py') }}
+          key: ${{ hashFiles('tests/test_oracle_hvsc.py') }}
+          sidtrace: "true"
+          tunes: tests/test_oracle_hvsc.py
       - name: Oracle comparison (never skipped)
         run: pytest -m oracle -n auto
 

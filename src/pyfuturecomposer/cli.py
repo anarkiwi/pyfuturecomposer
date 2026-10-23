@@ -32,7 +32,9 @@ def _reglog(args) -> None:
 
 def _wav(args) -> None:
     song = read(args.song)
-    audio.render_wav(song, args.output, seconds=args.seconds, model=args.model)
+    audio.render_wav(
+        song, args.output, seconds=args.seconds, model=args.model, progress=True
+    )
     print(f"wrote {args.output}")
 
 
