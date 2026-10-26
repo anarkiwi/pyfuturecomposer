@@ -6,12 +6,11 @@
 
 import numpy as np
 
-from pysidtracker import SidImage
 from pysidtracker.cadence import cadence_info
 
-from pyfuturecomposer import FutureComposerPlayer, FutureComposerSidParser, parse
-from pyfuturecomposer.constants import OFF_SIGNATURE
+from pyfuturecomposer import FutureComposerPlayer, parse
 from pyfuturecomposer.errors import FutureComposerParseError
+from pyfuturecomposer.variant import variant_of
 
 PLAYER = "^mon/futurecomposer$"
 
@@ -19,14 +18,15 @@ PLAYER = "^mon/futurecomposer$"
 def render(data, song, nframes):
     """Render 1-based ``song`` of a Future Composer ``.sid`` and the build it decoded."""
     tune = parse(data)
-    anchor = FutureComposerSidParser().recognize(SidImage.from_bytes(data))
-    if anchor is None:
+    if variant_of(tune).source("build").kind == "default":
         raise FutureComposerParseError("no Future Composer player signature")
+    player = FutureComposerPlayer(tune, subtune=song - 1)
+    var = player.variant
     info = {
-        "layout": anchor - tune.load - OFF_SIGNATURE,
-        "init": tune.init - tune.load,
-        "play": tune.play - tune.load,
+        "layout": var.layout,
+        "init": var.init,
+        "play": var.play,
         **cadence_info(data, song),
     }
-    grid = FutureComposerPlayer(tune, subtune=song - 1).render_grid(nframes)
+    grid = player.render_grid(nframes)
     return np.asarray(grid, np.int16), info

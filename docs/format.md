@@ -69,3 +69,14 @@ reproduced by this transcription.
   (WAV render).
 - [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) — shared
   container/image/detection base.
+
+## Build detection
+
+`pyfuturecomposer.variant` locates the build from the player code. The
+recognised signature (`SITE`, one `SitePattern` reporting which alternative
+matched) places every inline table: its offset from where the reference build
+has it (`constants.OFF_SIGNATURE`) is added to each table offset. Each value
+(`build`, `layout`, the table offsets, `init`, `play`) is a `pysidtracker`
+facet reported with its source (`detected@$addr`, `inferred(...)`, `default`),
+shown by `pysidtracker info`. Builds without the row-advance signature keep the
+reference offsets.

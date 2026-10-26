@@ -31,6 +31,7 @@ from pyfuturecomposer import constants
 from pyfuturecomposer.errors import FutureComposerParseError
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.reader import parse
+from pyfuturecomposer.variant import variant_of
 
 SID_REG_BASE = constants.SID_BASE
 
@@ -49,28 +50,29 @@ class FutureComposerPlayer(MemPlayer):
         song = source if isinstance(source, Song) else parse(bytes(source))
         self.song = song
         load = song.load
-        c = constants
-        self.freq_lo = load + c.OFF_FREQ_LO
-        self.freq_hi = load + c.OFF_FREQ_HI
-        self.seq_lo = load + c.OFF_SEQ_LO
-        self.seq_hi = load + c.OFF_SEQ_HI
-        self.pat_ptr = load + c.OFF_PAT_PTR
-        self.instr = load + c.OFF_INSTR
-        self.voice_base = load + c.OFF_VOICE_BASE
-        self.speed_addr = load + c.OFF_SPEED
-        self.t_pwstep = load + c.OFF_PW_STEP
-        self.t_filter = load + c.OFF_FILTER
-        self.t_wavearp = load + c.OFF_WAVE_ARP
-        self.t_arpdelay = load + c.OFF_ARP_DELAY
-        self.t_waveptr = load + c.OFF_WAVE_PROG_PTR
-        self.t_wavepitch = load + c.OFF_WAVE_PROG_PITCH
-        self.t_wavectrl = load + c.OFF_WAVE_PROG_CTRL
-        self.mod = load + c.OFF_MOD
-        self.a_slide_lo = load + c.OFF_SLIDE_LO
-        self.a_pw_carry = load + c.OFF_PW_CARRY
-        self.a_filt_lo = load + c.OFF_FILT_LO
-        self.a_filt_hi = load + c.OFF_FILT_HI
-        self.a_wave_self = load + c.OFF_WAVE_PROG_SELF
+        var = variant_of(song).resolve()
+        self.variant = var
+        self.freq_lo = load + var.freq_lo
+        self.freq_hi = load + var.freq_hi
+        self.seq_lo = load + var.seq_lo
+        self.seq_hi = load + var.seq_hi
+        self.pat_ptr = load + var.pat_ptr
+        self.instr = load + var.instr
+        self.voice_base = load + var.voice_base
+        self.speed_addr = load + var.speed
+        self.t_pwstep = load + var.pw_step
+        self.t_filter = load + var.filter
+        self.t_wavearp = load + var.wave_arp
+        self.t_arpdelay = load + var.arp_delay
+        self.t_waveptr = load + var.wave_prog_ptr
+        self.t_wavepitch = load + var.wave_prog_pitch
+        self.t_wavectrl = load + var.wave_prog_ctrl
+        self.mod = load + var.mod
+        self.a_slide_lo = load + var.slide_lo
+        self.a_pw_carry = load + var.pw_carry
+        self.a_filt_lo = load + var.filt_lo
+        self.a_filt_hi = load + var.filt_hi
+        self.a_wave_self = load + var.wave_prog_self
         self.finished = False
         super().__init__(song.image, load, subtune)
 
