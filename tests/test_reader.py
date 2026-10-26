@@ -1,5 +1,7 @@
 """Reader tests: PSID/PRG container parsing into a Song."""
 
+import io
+
 import pytest
 
 from pysidtracker.header import write_psid
@@ -57,3 +59,10 @@ def test_read_tune_file(tune_path):
     assert song.play == song.load + 6
     assert len(song.image) > 0
     assert song.name  # the PSID header carries a title
+
+
+def test_read_sources_agree(tune_path):
+    data = tune_path.read_bytes()
+    assert (
+        read(data) == read(io.BytesIO(data)) == read(tune_path) == read(str(tune_path))
+    )

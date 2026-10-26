@@ -6,10 +6,10 @@ C64 SID songs, with byte-exact per-frame SID register output and optional WAV
 rendering through an emulated SID.
 
 Consumes `.sid` files (PSID/RSID containers) and bare `.prg` images through the
-shared [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) base: the
-relocatable Future Composer player is located by its code signature and
-packed/relocating builds are detected by running the tune's init — container
-headers are not trusted.
+shared [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) base. A code
+signature recognises the player. Each build's tables, work area and play entry
+are read from the operands of its own play code, and the tune's own init is run
+before playback.
 
 ## Install
 
@@ -23,6 +23,9 @@ pip install pyfuturecomposer   # reader/player/reglog, WAV rendering via pyresid
 import pyfuturecomposer as fc
 
 song = fc.read("tune.sid")            # path, bytes, or binary file object; .sid or .prg
+
+# Where this build keeps each table, and how each location was found.
+fc.FutureComposerPlayer(song).variant.as_info()   # {"freq_lo": 0x5ab, "freq_lo.src": "detected@$1949", ...}
 
 # The playroutine is a pysidtracker MemPlayer: per-frame SID register writes,
 # or a forward-filled 25-register grid.

@@ -52,3 +52,10 @@ def test_two_players_independent(tune_path):
     p2 = FutureComposerPlayer(song)
     p1.play_frame()  # advance p1 only
     assert p2.play_frame()  # p2's first frame still produces writes
+
+
+def test_reference_tune_boots_its_own_init(tune_path):
+    song = read(tune_path)
+    player = FutureComposerPlayer(song)
+    assert player.variant.source("play").kind == "detected"
+    assert player.render_grid(64) == FutureComposerPlayer(song).render_grid(64)

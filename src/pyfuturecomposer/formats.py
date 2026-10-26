@@ -14,11 +14,10 @@ from typing import Iterable, Sequence
 
 from pysidtracker import FormatCommand, SidFormat
 
-from pyfuturecomposer import writer
+from pyfuturecomposer import layout, writer
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import FutureComposerPlayer
 from pyfuturecomposer.reader import FutureComposerSidParser, read
-from pyfuturecomposer.variant import variant_of
 
 
 def _metadata(song: Song) -> Sequence:
@@ -29,8 +28,8 @@ def _metadata(song: Song) -> Sequence:
 def _describe(song: Song) -> Iterable[str]:
     """Extra ``info`` lines for a Future Composer tune."""
     yield f"image bytes: {len(song.image)}"
-    variant = variant_of(song)
-    for name in ("build", "layout", "init", "play"):
+    variant = layout.variant(song)
+    for name in ("signature", "layout", "init", "play", "work"):
         yield f"{name}: {variant[name]} ({variant.source(name)})"
 
 
@@ -64,6 +63,8 @@ FORMAT = SidFormat(
     player=FutureComposerPlayer,
     describe=_describe,
     metadata=_metadata,
+    variant=layout.variant,
+    facet_sites=lambda song: layout.sites(layout.variant(song)),
     commands=(
         FormatCommand(
             "export",

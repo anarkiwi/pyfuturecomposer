@@ -20,7 +20,7 @@ loads directly into the editor (:func:`is_editor_native`).
 import struct
 from pathlib import Path
 
-from pysidtracker.header import PSID_MAGIC
+from pysidtracker import write_psid
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.model import Song
@@ -28,9 +28,8 @@ from pyfuturecomposer.model import Song
 # Canonical FutureComposer editor module: driver at $1800, play at $1806.
 EDITOR_LOAD = 0x1800
 
-# PSID v2 header size / data offset (bytes before the C64 image begins).
-_PSID_HEADER_SIZE = 0x7C
-_STR_LEN = 32
+# Longest PSID header string (a 32-byte field with its NUL terminator).
+_STR_MAX = 31
 
 
 def is_editor_native(song: Song) -> bool:
@@ -60,37 +59,22 @@ def write_prg(song: Song, path) -> None:
     Path(path).write_bytes(to_prg(song))
 
 
-def _psid_str(text: str) -> bytes:
-    """Encode a PSID header string field (Latin-1, NUL-padded, truncated)."""
-    return text.encode("latin-1", "replace")[: _STR_LEN - 1].ljust(_STR_LEN, b"\x00")
-
-
 def to_sid(song: Song) -> bytes:
     """Serialize ``song`` as a PSID v2 container (round-trips through ``read``).
 
-    The load address is embedded in the first two body bytes (header
-    ``loadAddress`` = 0), matching HVSC convention; init/play and the metadata
-    strings are preserved so :func:`~pyfuturecomposer.reader.read` reconstructs an
-    equal :class:`Song`.
+    The load address is embedded in the first two body bytes, matching HVSC;
+    metadata longer than a header field (31 characters) is truncated.
     """
-    header = bytearray(_PSID_HEADER_SIZE)
-    header[0:4] = PSID_MAGIC
-    struct.pack_into(
-        ">HHHHHHH",
-        header,
-        4,
-        2,  # version
-        _PSID_HEADER_SIZE,  # data offset
-        0,  # load address (0 -> embedded in the first two body bytes)
-        song.init,
-        song.play,
-        1,  # songs
-        1,  # start song
+    return write_psid(
+        load=song.load,
+        init=song.init,
+        play=song.play,
+        image=song.image,
+        name=song.name[:_STR_MAX],
+        author=song.author[:_STR_MAX],
+        released=song.released[:_STR_MAX],
+        embed_load=True,
     )
-    header[22:54] = _psid_str(song.name)
-    header[54:86] = _psid_str(song.author)
-    header[86:118] = _psid_str(song.released)
-    return bytes(header) + struct.pack("<H", song.load) + song.image
 
 
 def write_sid(song: Song, path) -> None:
