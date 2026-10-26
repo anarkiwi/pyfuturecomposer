@@ -160,3 +160,51 @@ def test_pattern_without_note_raises_parse_error():
     _put16(img, c.OFF_PAT_PTR, LOAD + len(song.image))
     with pytest.raises(FutureComposerParseError, match="pattern"):
         _run(Song(image=bytes(img), load=LOAD, init=LOAD, play=LOAD + 6), frames=2)
+
+
+def _glide_onset(threshold):
+    pattern = (
+        c.DUR_MIN | 0x3F,
+        c.PORTA_MIN | 1,
+        0x30 | threshold,
+        c.INSTR_MIN | 0,
+        0x0C,
+        c.PATTERN_END,
+    )
+    player = FutureComposerPlayer(_build(0x00, pattern))
+    grid = player.render_grid(40)
+    assert player._rd(player.a_slide) == threshold  # pylint: disable=protected-access
+    onset = next(i for i, row in enumerate(grid) if row[0])
+    assert grid[onset][0] == 0x100 - 0x30
+    return onset
+
+
+def test_slide_threshold_gates_glide():
+    onsets = [_glide_onset(t) for t in (0, 3, 6)]
+    assert onsets == sorted(set(onsets))
+
+
+@pytest.mark.parametrize("ctrl", [0x21, 0x81])
+def test_wave_program_reads_through_operand_words(ctrl):
+    img = bytearray(_build(0x10, _NOTE_PATTERN).image)
+    for i, addr in enumerate((LOAD + 0x780, LOAD + 0x790)):
+        _put(img, c.OFF_WAVE_PROG_PTR + 4 * i, addr)
+        _put(img, c.OFF_WAVE_PROG_PTR + 4 * i + 2, addr >> 8)
+    img[0x780:0x790] = bytes([ctrl]) * 16
+    img[0x790:0x7A0] = bytes([0x05]) * 16
+    song = Song(image=bytes(img), load=LOAD, init=LOAD, play=LOAD + 6)
+    grid = FutureComposerPlayer(song).render_grid(8)
+    assert (0x05 + 0x0D, ctrl) in {(row[1], row[4]) for row in grid}
+
+
+def test_cold_init_clears_work_area():
+    load = 0x0200
+    song = Song(image=b"\xaa" * 0x800, load=load, init=load, play=load + 6)
+    player = FutureComposerPlayer(song)
+    assert player.variant.source("play").kind == "default"
+    mem = bytes(
+        player._rd(a) for a in range(0x0277, 0x02DC)
+    )  # pylint: disable=protected-access
+    work = bytearray(c.WORK_SIZE)
+    work[0x02C9 - c.WORK_BASE] = c.FILTER_ROUTE_SEED
+    assert mem == b"\xaa" + bytes(work) + b"\xaa"

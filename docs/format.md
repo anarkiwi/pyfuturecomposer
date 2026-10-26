@@ -10,15 +10,47 @@ to produce byte-exact per-frame SID register output.
 
 Tunes are consumed as `.sid` (PSID/RSID) containers or bare `.prg` images
 through the shared [`pysidtracker`](https://github.com/anarkiwi/pysidtracker)
-base. The player is relocatable, so it is located by its code signature rather
-than by the container header; packed/relocating builds are detected by running
-the tune's init in a 6502 emulator. Container headers are not trusted.
+base. The header's load/init/play addresses are used. A bare `.prg` falls back
+to init = load and play = load + 6. `recognize` finds the player by
+`layout.SIGNATURE`. This is a `SitePattern` with two alternatives: `row`, the
+per-voice row/duration advance, and `filter`, the `$D417` filter store. It
+reports which alternative matched, and every absolute operand is wildcarded.
+
+## Build variants
+
+Future Composer builds share one play routine. They differ in where the tables,
+the per-voice work area and the self-modified operands sit, and in small code
+inserts that shift everything after them. `pyfuturecomposer.layout.detect`
+reads each address from the code that uses it and returns a
+`pysidtracker.Variant`. Each facet has a value and a source:
+`detected@$addr` for the code site it was read from, or `default` for the
+reference build's value.
+
+- `signature`, `layout`: the recogniser alternative that matched, and its
+  offset from where the reference build has that fragment.
+- `init`, `play`: the entry points as offsets from load. `play` is detected when
+  `layout.PLAY_CHAIN` matches the play entry. This `RoutineChain` reads the
+  state-byte test and then the tick it branches to.
+- `work`: the absolute base of the per-voice work area (`$0278` in the
+  reference build), from the state byte the play entry tests.
+- `tempo` (the speed byte), `voice_base`, `seq_lo`/`seq_hi`, `pat_ptr`, `freq_lo`/`freq_hi`,
+  `instr`, `mod`, `pw_step`, `wave_arp`, `filter`, `wave_prog_ptr`,
+  `arp_delay`: the table bases, from the operands of their table-indexed loads
+  (`layout.SITES`).
+- `slide`, `pw_carry`, `wave_ctrl`, `wave_pitch`, `filt_lo`/`filt_hi`: the
+  operands the player rewrites at run time.
+
+`FutureComposerPlayer.variant` is the variant it plays with. `Variant.as_info()`
+is the survey `info`, and the `pysidtracker` format registration exposes it to
+`pysidtracker variant census`.
 
 ## Data model
 
-`fc.read` / `fc.parse` return a `Song`: the tempo divider, the per-voice
-sequence and pattern opcode streams, the instrument records, and the
-wave/arp/pulse-width/filter tables the playroutine walks per frame.
+`fc.read` / `fc.parse` return a `Song`: the raw C64 `image` (player code and
+inline song data), its `load` address, the `init` / `play` entry points, and the
+header `name` / `author` / `released` strings. The song data stays in the image.
+The player reads sequences, patterns, instruments and modulation tables from
+there, at the addresses the variant gives.
 
 ## Writing back (editor-loadable export)
 
@@ -36,13 +68,17 @@ operands, so this exporter does not re-relocate them to `$1800`.
 
 `FutureComposerPlayer` is a `pysidtracker.MemPlayer`: the base owns the flat
 64 KiB 6502 memory, the `$D400` register snapshot/diff, and the `iter_frames` /
-`render_grid` drivers, while this package implements only FC's `_init` (clear the
-work bytes) and `_frame` (one tick). `_frame` is a faithful integer transcription
-of Future Composer's `entry_1806` 6502 play routine: the tempo divider, the
-per-voice DEC-duration row advance, the opcode-stream SEQUENCE + PATTERN walks,
-and the dense per-frame modulation engine (slide-target vibrato / portamento, the
-`$E0` glide, a 16-bit pulse-width sweep, the filter-cutoff program and the
-wave / arp tables).
+`render_grid` drivers. When the play entry is recognised, `_init` starts from
+memory after the tune's own init (`pysidtracker.oracle.boot_flat`, which passes
+the subtune in `A`). Otherwise it runs the transcribed cold init. `_frame` is
+an integer transcription of Future Composer's `entry_1806` 6502 play routine:
+the tempo divider, the per-voice DEC-duration row advance, the opcode-stream
+SEQUENCE and PATTERN walks, and the per-frame modulation engine. That engine
+covers slide-target vibrato and portamento, the `$E0` glide, a 16-bit
+pulse-width sweep, the filter-cutoff program and the wave / arp tables. Work
+bytes go through the variant's `work` base. The self-modified operands (the
+glide delay and the wave-program table pointers) are read back from memory, as
+the 6502 reads them.
 
 `iter_register_writes(song, max_frames=..) -> (clock, reg, val)` is the shared
 `py*` register-log surface (via `pysidtracker.reglog.register_writes_from_player`,
@@ -50,15 +86,14 @@ matching `pymusicassembler` / `pygoattracker`). The player sets `MASK_PW_HI`, so
 both it and the grid carry only the low nibble of the pulse-width-high registers
 (`$D403/$D40A/$D411`), the bits the SID uses.
 
-This is a transcription of a single MoN/FutureComposer player build -- the one
-derived from the reverse-engineering reference tune *We R Da Best (tune 2)*
-(Warren Pilbrough / Jade Tiger). `render_grid` reproduces the `sidtrace`
-`sidplayfp` register oracle for that build byte-exact (see
-[oracle testing](oracle-testing.md) and `tests/test_oracle_hvsc.py`). Detection
-of the broader FC family -- both player-code signatures, every load address, PSID
-and RSID -- is validated across a ~150-tune HVSC corpus in `tests/test_corpus.py`;
-other player builds place their inline tables at different offsets and are not
-reproduced by this transcription.
+The transcription follows the play routine of the reference tune *We R Da
+Best (tune 2)* (Warren Pilbrough / Jade Tiger). `render_grid` reproduces the
+`sidtrace` `sidplayfp` register oracle for it byte-exact (see
+[oracle testing](oracle-testing.md) and `tests/test_oracle_hvsc.py`). Builds
+whose play code matches this routine are placed by their variant. Builds with
+code paths the transcription does not have (for example V3.0/V3.1, #17) are not
+reproduced. `tests/test_corpus.py` checks detection over a ~150-tune HVSC
+corpus.
 
 ## References
 
@@ -69,14 +104,3 @@ reproduced by this transcription.
   (WAV render).
 - [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) — shared
   container/image/detection base.
-
-## Build detection
-
-`pyfuturecomposer.variant` locates the build from the player code. The
-recognised signature (`SITE`, one `SitePattern` reporting which alternative
-matched) places every inline table: its offset from where the reference build
-has it (`constants.OFF_SIGNATURE`) is added to each table offset. Each value
-(`build`, `layout`, the table offsets, `init`, `play`) is a `pysidtracker`
-facet reported with its source (`detected@$addr`, `inferred(...)`, `default`),
-shown by `pysidtracker info`. Builds without the row-advance signature keep the
-reference offsets.

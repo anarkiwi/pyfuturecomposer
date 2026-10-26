@@ -1,25 +1,17 @@
-"""Read a Future Composer tune (PSID/.sid or .prg image) into a :class:`Song`.
+"""Read a Future Composer tune (PSID/RSID ``.sid`` or bare ``.prg``) into a :class:`Song`.
 
-A PSID/RSID container wraps the raw C64 image (player code + inline song data)
-with a header giving the load/init/play addresses.  Future Composer is
-relocatable (init = load, play = load + 6) and carries its data tables inline at
-fixed offsets-from-load, so the reader only needs to unwrap the container; the
-player walks the inline tables from the image directly.
-
-Container/header decoding is delegated to :mod:`pysidtracker` (the shared
-``parse_sid_header``/``SidImage``); the Future Composer init/play fallbacks and
-the bare ``.prg`` path are applied on top.
+The container is decoded by :mod:`pysidtracker`; a missing header init/play falls
+back to load / load + 6.  Tables are placed later by :mod:`pyfuturecomposer.layout`.
 """
 
-from pathlib import Path
 from typing import Any, Tuple
 
-from pysidtracker import BaseSidParser, SidError, SidImage
+from pysidtracker import BaseSidParser, SidError, SidImage, read_bytes
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import SidParseError
+from pyfuturecomposer.layout import SIGNATURE
 from pyfuturecomposer.model import Song
-from pyfuturecomposer.variant import SITE
 
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
@@ -60,9 +52,9 @@ def parse(data: bytes) -> Song:
     )
 
 
-def read(path) -> Song:
-    """Read a Future Composer tune from a path into a :class:`Song`."""
-    return parse(Path(path).read_bytes())
+def read(source) -> Song:
+    """Read a Future Composer tune from a path, bytes or binary file object."""
+    return parse(read_bytes(source))
 
 
 class FutureComposerSidParser(BaseSidParser):
@@ -82,11 +74,8 @@ class FutureComposerSidParser(BaseSidParser):
     def recognize(self, image):
         """Return the C64 address of the FC player signature, or ``None``.
 
-        Future Composer relocates cleanly (its data offsets are load-relative)
-        and loads directly, so the player code is present in the freshly loaded
-        image.  :data:`~pyfuturecomposer.variant.SITE` wildcards every absolute
-        operand, so a match is relocation-independent; the returned address is a
-        truthy anchor that classifies the tune as ``DIRECT``.
+        :data:`~pyfuturecomposer.layout.SIGNATURE` wildcards every absolute operand,
+        so a match is relocation-independent and classifies the tune ``DIRECT``.
         """
-        match = SITE.find_first(image)
-        return None if match is None else match.addr
+        hit = SIGNATURE.find_first(image)
+        return None if hit is None else hit.addr

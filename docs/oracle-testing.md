@@ -28,10 +28,9 @@ came from, side by side.
 
 ## Coverage
 
-This player is a faithful transcription of **one** MoN/FutureComposer build (the
-`We R Da Best (tune 2)` reference), so byte-exact playback is confirmed for that
-build. Other FC builds place their inline tables at different offsets; recognition
-of the broader family is covered by `tests/test_corpus.py`, not this oracle.
+The CI oracle covers the `We R Da Best (tune 2)` reference tune. Other builds
+are placed by their variant (see [format](format.md#build-variants)). The HVSC
+survey and `scripts/fc_memdiff.py` below measure how far that reaches.
 
 ## HVSC oracle survey
 
@@ -39,17 +38,16 @@ of the broader family is covered by `tests/test_corpus.py`, not this oracle.
 into the
 [`pysidtracker.survey`](https://github.com/anarkiwi/pysidtracker/blob/main/docs/survey.md)
 whole-song comparison against the `sidtrace` oracle (Docker), over every subtune
-of every HVSC tune SIDId names `MoN/FutureComposer` (`PLAYER`). Its `info`
-reports the decoded build: `layout` (offset of the recognised player signature
-from where the transcribed build has it, `constants.OFF_SIGNATURE`; nonzero means
-the inline tables sit elsewhere), the `init` and `play` entry offsets from the
-load address, and `pysidtracker.cadence.cadence_info`'s `rsid`, play `trigger`,
-`speed` (calls per PAL frame) and `dynamic`. A
+of every HVSC tune SIDId names `MoN/FutureComposer` (`PLAYER`). Its `info` is the
+player's `Variant.as_info()`. That is every facet value (`signature`,
+`layout`, `init`, `play`, `work`, `tempo` and the table offsets) plus a
+`<facet>.src` provenance key, followed by `pysidtracker.cadence.cadence_info`'s
+`rsid`, play `trigger`, `speed` (calls per PAL frame) and `dynamic`. A
 tune without the FC player signature raises `FutureComposerParseError` (a
 `pysidtracker.SidParseError`), which the survey records as `not_decompiled`.
 
 ```bash
-pip install "pysidtracker[survey]>=0.32.0"
+pip install "pysidtracker[survey]>=0.38.0"
 python -m pysidtracker.survey find $HVSC --player '^mon/futurecomposer$' --out .hvsc-survey/tunes.csv
 PYTHONPATH=scripts python -m pysidtracker.survey run $HVSC .hvsc-survey/tunes.csv \
     --work .hvsc-survey --render oracle_hvsc:render --jobs 32
@@ -60,3 +58,17 @@ PYTHONPATH=scripts python -m pysidtracker.survey diff $HVSC .hvsc-survey/tunes.c
 ```
 
 `.hvsc-survey/` holds copyright-derived traces and is gitignored.
+
+## Lockstep check against the tune's own code
+
+`scripts/fc_memdiff.py` runs `FutureComposerPlayer` frame by frame beside
+`pysidtracker.oracle.EmuPlayer`, which executes the tune's own 6502 code. It
+compares the SID registers and the work area, and names each work byte by its
+reference-build address. It needs no Docker. Given a survey `find` CSV, it
+groups every tune by the first byte that diverges:
+
+```bash
+python scripts/fc_memdiff.py tune.sid --frames 500
+python scripts/fc_memdiff.py .hvsc-survey/tunes.csv --hvsc $HVSC --jobs 64
+```
+

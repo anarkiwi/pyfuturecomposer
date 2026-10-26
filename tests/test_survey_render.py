@@ -26,15 +26,16 @@ def test_render_matches_player(tune_path):
     assert grid.dtype == np.int16
     np.testing.assert_array_equal(grid, FutureComposerPlayer(data).render_grid(120))
     assert json.loads(json.dumps(info)) == info
-    assert info == {
+    assert {k: info[k] for k in ("signature", "layout", "init", "play", "work")} == {
+        "signature": "row",
         "layout": 0,
         "init": 0,
         "play": 6,
-        "rsid": False,
-        "trigger": "pal_video",
-        "speed": 1,
-        "dynamic": False,
+        "work": 0x278,
     }
+    assert info["play.src"] == "detected@$1806"
+    cadence = {"rsid": False, "trigger": "pal_video", "speed": 1, "dynamic": False}
+    assert {k: info[k] for k in cadence} == cadence
 
 
 def test_render_selects_one_based_subtune(tune_path, monkeypatch):
