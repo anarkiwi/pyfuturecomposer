@@ -14,34 +14,12 @@ the bare ``.prg`` path are applied on top.
 from pathlib import Path
 from typing import Any, Tuple
 
-from pysidtracker import (
-    BaseSidParser,
-    CodePattern,
-    SidError,
-    SidImage,
-    find_code_first,
-)
+from pysidtracker import BaseSidParser, SidError, SidImage
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import SidParseError
 from pyfuturecomposer.model import Song
-
-# Relocation-independent MoN/FutureComposer player signatures.  Every operand
-# that carries an absolute address (relocation-dependent) or a per-tune zero-page
-# pointer is a wildcard (``??``); only the opcodes and fixed immediates remain.
-# Both patterns were verified byte-for-byte against the MoN/FutureComposer HVSC
-# corpus: the first (a fragment of the per-voice row/duration advance -- INC ,X /
-# LDY ,X / LDA (zp),Y / CMP #$FF ...) matches the vast majority; the second (the
-# STA $D417 filter store followed by LDY #6 / six DEY / LDA (zp),Y) covers the
-# handful of player revisions the first misses.  Together they cover the corpus.
-_FC_PATS: Tuple[CodePattern, ...] = tuple(
-    CodePattern(spec)
-    for spec in (
-        "FE ?? ?? BC ?? ?? B1 ?? C9 FF D0 ?? A9 00 9D ?? ?? "
-        "BD ?? ?? F0 05 DE ?? ?? 10 03",
-        "8D 17 D4 A0 06 88 88 88 88 88 88 B1 ??",
-    )
-)
+from pyfuturecomposer.variant import SITE
 
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
@@ -106,12 +84,9 @@ class FutureComposerSidParser(BaseSidParser):
 
         Future Composer relocates cleanly (its data offsets are load-relative)
         and loads directly, so the player code is present in the freshly loaded
-        image.  The patterns in :data:`_FC_PATS` wildcard every absolute
+        image.  :data:`~pyfuturecomposer.variant.SITE` wildcards every absolute
         operand, so a match is relocation-independent; the returned address is a
         truthy anchor that classifies the tune as ``DIRECT``.
         """
-        for pattern in _FC_PATS:
-            match = find_code_first(image, pattern)
-            if match is not None:
-                return match.addr
-        return None
+        match = SITE.find_first(image)
+        return None if match is None else match.addr

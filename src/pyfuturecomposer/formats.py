@@ -18,6 +18,7 @@ from pyfuturecomposer import writer
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import FutureComposerPlayer
 from pyfuturecomposer.reader import FutureComposerSidParser, read
+from pyfuturecomposer.variant import variant_of
 
 
 def _metadata(song: Song) -> Sequence:
@@ -28,6 +29,9 @@ def _metadata(song: Song) -> Sequence:
 def _describe(song: Song) -> Iterable[str]:
     """Extra ``info`` lines for a Future Composer tune."""
     yield f"image bytes: {len(song.image)}"
+    variant = variant_of(song)
+    for name in ("build", "layout", "init", "play"):
+        yield f"{name}: {variant[name]} ({variant.source(name)})"
 
 
 def _add_export_arguments(subparser) -> None:
