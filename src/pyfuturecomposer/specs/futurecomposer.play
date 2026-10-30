@@ -604,7 +604,7 @@ machine voice[x in 0..3] {
   }
 
   step {
-    if clock.run {
+    if clock.run && (!L.has_state || st != 2) {
       let ad = voice_tab[x];
       wad := ad;
       zp_ff := x;
