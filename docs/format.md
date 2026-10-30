@@ -63,6 +63,12 @@ them. `read(path, validate=True)` raises `SidParseError` for bytes that are not
 one stream. Validation is off by default: builds whose tables the layout does
 not locate (#13, #17) do not parse.
 
+`pysidtracker equiv A B` compares two tunes by these streams, so two containers
+of one song are equal and a changed note is reported as a diff. The format's
+snapshot probes are the `.prg` and `.sid` exports and the variant `info`.
+Tables that reach the C64 I/O area are rejected, because a C64 reads chips
+there instead of RAM.
+
 A sequence is read through its voice pointer (`seq_lo`/`seq_hi`) and ends at
 `$FE` (the song stops) or `$FF` (the voice restarts at its first byte). It must
 name at least one pattern.

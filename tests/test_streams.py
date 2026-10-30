@@ -246,3 +246,10 @@ def test_transpose_step_adds_its_low_five_bits_to_the_note_index():
     assert first_pitch((0x00, c.SEQ_LOOP)) == 0x0C
     assert first_pitch((c.SEQ_TRANSPOSE | 3, 0x00, c.SEQ_LOOP)) == 0x0F
     assert first_pitch((c.SEQ_TRANSPOSE | 0x23, 0x00, c.SEQ_LOOP)) == 0x0F
+
+
+def test_tables_in_the_io_area_are_not_readable_as_ram():
+    base = _build(0x00, _NOTE_PATTERN)
+    song = replace(base, load=0xD000, init=0xD000, play=0xD006)
+    with pytest.raises(FutureComposerParseError, match="I/O area"):
+        list(streams(song))
