@@ -246,3 +246,19 @@ def test_transpose_step_adds_its_low_five_bits_to_the_note_index():
     assert first_pitch((0x00, c.SEQ_LOOP)) == 0x0C
     assert first_pitch((c.SEQ_TRANSPOSE | 3, 0x00, c.SEQ_LOOP)) == 0x0F
     assert first_pitch((c.SEQ_TRANSPOSE | 0x23, 0x00, c.SEQ_LOOP)) == 0x0F
+
+
+def test_spec_player_checks_every_stream_kind_it_opens(tune_path):
+    player = FutureComposerPlayer(parse(tune_path.read_bytes()), validate=True)
+    for _ in range(300):
+        player.play_frame()
+    opened = {ref.rsplit(":", 1)[1] for ref, _base in player.validator.results}
+    assert opened == {"sequence", "pattern", "instrument"}
+    assert not player.validator.failures()
+
+
+def test_unterminated_pattern_is_played_unless_validated():
+    song = _build(0x00, (0x0C,) * 0x100)
+    FutureComposerPlayer(song).play_frame()
+    with pytest.raises(FutureComposerParseError, match="pattern"):
+        FutureComposerPlayer(song, validate=True).play_frame()
