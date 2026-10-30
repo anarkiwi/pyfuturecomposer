@@ -48,7 +48,6 @@ def test_sequence_steps_and_loop():
     "data",
     [
         (c.SEQ_LOOP,),
-        (c.SEQ_END,),
         (0x81, 0x41, c.SEQ_LOOP),
         (0x00,),
     ],
@@ -56,6 +55,16 @@ def test_sequence_steps_and_loop():
 def test_sequence_the_player_cannot_walk_is_rejected(data):
     with pytest.raises(FutureComposerParseError):
         _sequence(*data)
+
+
+def test_a_voice_may_end_the_song_without_naming_a_pattern():
+    seq = _sequence(c.SEQ_END)
+    assert seq.steps == () and not seq.loops
+    song = _build(0x00, _NOTE_PATTERN, seq=(c.SEQ_END,))
+    assert any(kind == "sequence" for _, _, kind in streams(song))
+    player = FutureComposerPlayer(song)
+    player.play_frame()
+    assert player.finished
 
 
 def test_grammar_and_player_agree_on_a_sequence_without_a_pattern():
@@ -264,8 +273,8 @@ def test_spec_player_checks_every_stream_kind_it_opens(tune_path):
     assert not player.validator.failures()
 
 
-def test_unterminated_pattern_is_played_unless_validated():
+def test_unterminated_pattern_is_rejected_unless_validation_is_off():
     song = _build(0x00, (0x0C,) * 0x100)
-    FutureComposerPlayer(song).play_frame()
+    FutureComposerPlayer(song, validate=False).play_frame()
     with pytest.raises(FutureComposerParseError, match="pattern"):
-        FutureComposerPlayer(song, validate=True).play_frame()
+        FutureComposerPlayer(song).play_frame()

@@ -66,8 +66,10 @@ there, at the addresses the variant gives.
 post-init memory, the three voice sequences, every pattern those sequences name
 and every instrument those patterns select; `pysidtracker grammar TUNE` lists
 them. `read(path, validate=True)` raises `SidParseError` for bytes that are not
-one stream. Validation is off by default: builds whose tables the layout does
-not locate (#13, #17) do not parse.
+one stream; it is off by default so that `info` and `export` still work on
+builds this grammar does not describe (#13, #17). The static listing leaves out
+patterns of an unterminated sequence, whose reach is unknown, and patterns whose
+pointer is not set yet.
 
 `pysidtracker equiv A B` compares two tunes by these streams, so two containers
 of one song are equal and a changed note is reported as a diff. The format's
@@ -76,8 +78,11 @@ Tables that reach the C64 I/O area are rejected, because a C64 reads chips
 there instead of RAM.
 
 A sequence is read through its voice pointer (`seq_lo`/`seq_hi`) and ends at
-`$FE` (the song stops) or `$FF` (the voice restarts at its first byte). It must
-name at least one pattern.
+`$FE` (the song stops) or `$FF` (the voice restarts at its first byte). The
+position byte is 8 bits, so 256 steps with no terminator are also one sequence:
+the player wraps to the first. A list that ends in `$FF` or has no terminator
+must name at least one pattern; a list that is only `$FE` is a voice that stops
+the song at once.
 
 | Sequence byte | Meaning |
 | --- | --- |
@@ -132,9 +137,10 @@ bytes are cells in the spec, so after every call the full 64 KiB outside the
 stack page equals the tune's own 6502 run for the reference build.
 
 The spec opens a `stream` with a grammar for each sequence, pattern and
-instrument it walks. `FutureComposerPlayer(song, validate=True)` parses each
-against `streams.GRAMMAR` and raises `FutureComposerParseError` for bytes that
-are not one stream, such as a pattern with no `$FF` terminator.
+instrument it walks. `FutureComposerPlayer` parses each against
+`streams.GRAMMAR` (`validate=True`, the default) and raises
+`FutureComposerParseError` for bytes that are not one stream, such as a pattern
+with no `$FF` terminator. `validate=False` plays them anyway.
 
 `pysidtracker playspec check src/pyfuturecomposer/specs/futurecomposer.play`
 type-checks the spec. A loop that runs past its bound, such as a sequence that

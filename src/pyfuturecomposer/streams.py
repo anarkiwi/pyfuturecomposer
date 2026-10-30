@@ -29,6 +29,7 @@ VOICES = 3
 PATTERN_IDS = 0x40
 INSTRUMENT_IDS = 0x20
 INSTRUMENT_SIZE = 8
+CYCLE_STEPS = 256
 
 Step = Tuple[str, int]
 Command = Tuple[str, Tuple[int, ...]]
@@ -36,17 +37,23 @@ Command = Tuple[str, Tuple[int, ...]]
 
 @dataclass(frozen=True)
 class Sequence:
-    """A voice's orderlist: ``("pattern"|"repeat"|"transpose", value)`` steps."""
+    """A voice's orderlist: ``("pattern"|"repeat"|"transpose", value)`` steps.
+
+    ``terminated`` is False for 256 steps with no terminator, which the 8-bit
+    position wraps back to the first.
+    """
 
     steps: Tuple[Step, ...]
     loops: bool
+    terminated: bool = True
 
     def to_bytes(self) -> bytes:
         """The stream bytes, terminator included."""
         out = bytearray()
         for kind, value in self.steps:
             out.append(value | _STEP_BITS[kind])
-        out.append(constants.SEQ_LOOP if self.loops else constants.SEQ_END)
+        if self.terminated:
+            out.append(constants.SEQ_LOOP if self.loops else constants.SEQ_END)
         return bytes(out)
 
     @property
@@ -135,8 +142,18 @@ class _Transformer(Transformer):
         return ("transpose", _value(children[0]) & 0x7F)
 
     def sequence(self, children):
-        *steps, stop = children
-        return Parsed(Sequence(tuple(steps), stop.type == "SEQ_LOOP"), stop.end_pos)
+        stop = children[-1] if isinstance(children[-1], Token) else None
+        steps = tuple(children[:-1] if stop else children)
+        if stop is None or stop.type == "SEQ_LOOP":
+            if not any(kind == "pattern" for kind, _ in steps):
+                raise FutureComposerParseError("sequence names no pattern")
+        if stop is None:
+            if len(steps) != CYCLE_STEPS:
+                raise FutureComposerParseError(
+                    f"sequence has no terminator within {len(steps)} bytes"
+                )
+            return Parsed(Sequence(steps, True, False), len(steps))
+        return Parsed(Sequence(steps, stop.type == "SEQ_LOOP"), stop.end_pos)
 
     def note(self, children):
         return ("note", (_value(children[0]),))
@@ -188,6 +205,9 @@ def _after_init(loaded: SidImage) -> SidImage:
 def streams(song: Song) -> Iterator[Tuple[str, Model, str]]:
     """``(name, model, rule)`` of every stream ``song``'s player reaches.
 
+    Patterns are listed from the terminated sequences only (an unterminated one
+    wraps, so how far it reaches is unknown) and only once their pointer is set.
+
     Raises:
       FutureComposerParseError: a pointer leads to bytes that are not one stream.
     """
@@ -212,11 +232,14 @@ def streams(song: Song) -> Iterator[Tuple[str, Model, str]]:
     for voice in range(VOICES):
         what = f"voice {voice} sequence"
         model = GRAMMAR.entry(image, seq_lo, seq_hi, voice, "sequence", what).model
-        patterns.update(model.patterns)
+        if model.terminated:
+            patterns.update(model.patterns)
         yield what, model, "sequence"
     pat_lo = song.load + var.pat_ptr
     instruments = set()
     for ident in sorted(patterns):
+        if not image.ptr(pat_lo, pat_lo + 1, 2 * ident):
+            continue
         what = f"pattern {ident}"
         model = GRAMMAR.entry(image, pat_lo, pat_lo + 1, 2 * ident, "pattern", what)
         instruments.update(model.model.instruments)
