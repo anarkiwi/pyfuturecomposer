@@ -123,3 +123,18 @@ def test_snapshot_probes_follow_the_song(tmp_path):
     assert probes["canonical"](a) != probes["canonical"](b)
     assert probes["prg"](a) != probes["prg"](b)
     assert probes["variant"](a) == probes["variant"](b)
+
+
+def test_info_and_export_work_on_a_tune_whose_streams_do_not_parse(
+    capsys, tmp_path, hvsc
+):
+    data = hvsc.read("MUSICIANS/T/TC/Amiga_Theme.sid")
+    source = tmp_path / "amiga.sid"
+    source.write_bytes(data)
+    with pytest.raises(SidError):
+        parse(data)
+    assert _cli(["info", str(source)]) == 0
+    assert "format:   futurecomposer" in capsys.readouterr().out
+    out = tmp_path / "amiga.prg"
+    assert _cli(["export", str(source), str(out)]) == 0
+    assert out.read_bytes() == to_prg(parse(data, validate=False))

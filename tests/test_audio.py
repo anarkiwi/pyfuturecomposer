@@ -57,6 +57,7 @@ def test_default_device_requires_pyresidfp(monkeypatch, tune_path):
     """Without pyresidfp installed, a helpful error is raised."""
     import builtins  # pylint: disable=import-outside-toplevel
 
+    song = reader.read(tune_path)
     real_import = builtins.__import__
 
     def _fake_import(name, *args, **kwargs):
@@ -66,4 +67,4 @@ def test_default_device_requires_pyresidfp(monkeypatch, tune_path):
 
     monkeypatch.setattr(builtins, "__import__", _fake_import)
     with pytest.raises(FutureComposerError):
-        audio.render_samples(reader.read(tune_path), seconds=0.01)
+        audio.render_samples(song, seconds=0.01)

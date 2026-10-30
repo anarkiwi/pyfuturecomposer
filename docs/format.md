@@ -65,11 +65,13 @@ there, at the addresses the variant gives.
 (`pysidtracker.ByteGrammar`). `streams.streams(song)` reads, from the tune's
 post-init memory, the three voice sequences, every pattern those sequences name
 and every instrument those patterns select; `pysidtracker grammar TUNE` lists
-them. `read(path, validate=True)` raises `SidParseError` for bytes that are not
-one stream; it is off by default so that `info` and `export` still work on
-builds this grammar does not describe (#13, #17). The static listing leaves out
+them. `read(path)` and `parse(data)` raise `SidParseError` for bytes that are not
+one stream (`validate=False` skips the check). The `info` and `export` commands
+and the format's parser object read without it, so they still work on a tune of
+a build this grammar does not describe (#13, #17). The static listing leaves out
 patterns of an unterminated sequence, whose reach is unknown, and patterns whose
-pointer is not set yet.
+pointer is not set yet. Validating runs the tune's own init, so a bare `.prg`,
+which has none, is checked as loaded.
 
 `pysidtracker equiv A B` compares two tunes by these streams, so two containers
 of one song are equal and a changed note is reported as a diff. The format's
