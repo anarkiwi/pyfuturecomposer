@@ -1,0 +1,39 @@
+// Future Composer song streams, one latin-1 character per byte.
+//
+// SEQUENCE is a voice's orderlist, PATTERN a note stream, INSTRUMENT one
+// 8-byte sound record.  Each is read from a pointer; the bytes after a
+// terminator are never read through that pointer (_TAIL).
+
+%import bytes (BYTE, _TAIL)
+
+PAT: /[\x00-\x3f]/
+REPEAT: /[\x40-\x7f]/
+TRANSPOSE: /[\x80-\xfd]/
+SEQ_END: "\xfe"
+SEQ_LOOP: "\xff"
+
+NOTE: /[\x00-\x7f]/
+DURATION: /[\x80-\xbf]/
+INSTR: /[\xc0-\xdf]/
+SLIDE: /[\xe0-\xef]/
+ROW: /[\xf0-\xfe]/
+PAT_END: "\xff"
+FIRST_ROW: "\xff"
+
+sequence: _modifier* step (step | _modifier)* _stop _TAIL?
+step: PAT
+_modifier: repeat | transpose
+repeat: REPEAT
+transpose: TRANSPOSE
+_stop: SEQ_END | SEQ_LOOP
+
+pattern: (_command | first_row) _command* PAT_END _TAIL?
+_command: note | duration | instr | slide | row
+note: NOTE
+duration: DURATION
+instr: INSTR
+slide: SLIDE BYTE
+row: ROW BYTE
+first_row: FIRST_ROW BYTE
+
+instrument: BYTE~8 _TAIL?

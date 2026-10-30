@@ -48,9 +48,48 @@ is the survey `info`, and the `pysidtracker` format registration exposes it to
 
 `fc.read` / `fc.parse` return a `Song`: the raw C64 `image` (player code and
 inline song data), its `load` address, the `init` / `play` entry points, and the
-header `name` / `author` / `released` strings. The song data stays in the image.
+header `name` / `author` / `released` strings. The song data stays in the image;
+see Song streams for how it is parsed.
 The player reads sequences, patterns, instruments and modulation tables from
 there, at the addresses the variant gives.
+
+## Song streams
+
+`pyfuturecomposer.streams.GRAMMAR` is the `futurecomposer.lark` byte grammar
+(`pysidtracker.ByteGrammar`). `streams.streams(song)` reads, from the tune's
+post-init memory, the three voice sequences, every pattern those sequences name
+and every instrument those patterns select; `pysidtracker grammar TUNE` lists
+them. `read(path, validate=True)` raises `SidParseError` for bytes that are not
+one stream. Validation is off by default: builds whose tables the layout does
+not locate (#13, #17) do not parse.
+
+A sequence is read through its voice pointer (`seq_lo`/`seq_hi`) and ends at
+`$FE` (the song stops) or `$FF` (the voice restarts at its first byte). It must
+name at least one pattern.
+
+| Sequence byte | Meaning |
+| --- | --- |
+| `$00`-`$3F` | play pattern `byte` |
+| `$40`-`$7F` | repeat the next pattern `byte & $3F` more times |
+| `$80`-`$FD` | transpose by `byte & $1F` (signed 8-bit add to the note index) |
+| `$FE` | end of song |
+| `$FF` | loop this voice |
+
+A pattern is read through the interleaved `pat_ptr` table (entry `id * 2`) and
+ends at `$FF` after a command. An `$FF` first byte is instead a row marker.
+
+| Pattern byte | Meaning |
+| --- | --- |
+| `$00`-`$7F` | note index |
+| `$80`-`$BF` | note duration `byte & $3F` |
+| `$C0`-`$DF` | select instrument `byte & $1F` |
+| `$E0`-`$EF` | slide command, then one argument byte |
+| `$F0`-`$FE` | row marker: the next byte is the note, and the instrument is not reloaded |
+| `$FF` | end of pattern |
+
+An instrument is an 8-byte record at `instr + id * 8`: pulse control and
+high nibble, waveform, attack/decay, sustain/release, aux, vibrato control,
+pulse-width control, master control.
 
 ## Writing back (editor-loadable export)
 

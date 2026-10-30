@@ -31,9 +31,7 @@ TUNES = {
 }
 
 
-tune_id, oracle_match = make_oracle_fixtures(
-    TUNES, player=FutureComposerPlayer, frames=250
-)
+tune_id, oracle_match = make_oracle_fixtures(TUNES, player=FutureComposerPlayer)
 
 
 @pytest.mark.oracle

@@ -6,20 +6,19 @@ back to load / load + 6.  Tables are placed later by :mod:`pyfuturecomposer.layo
 
 from typing import Any, Tuple
 
-from pysidtracker import BaseSidParser, SidError, SidImage, read_bytes
+from pysidtracker import BaseSidParser, SidError, SidImage, read_bytes, reraise_as
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import SidParseError
 from pyfuturecomposer.layout import SIGNATURE
 from pyfuturecomposer.model import Song
+from pyfuturecomposer.streams import streams
 
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     """Return (load, init, play, name, author, released, image)."""
-    try:
+    with reraise_as(SidParseError, SidError):
         image = SidImage.from_bytes(data)
-    except SidError as exc:
-        raise SidParseError(str(exc)) from exc
     load = image.load
     header = image.header
     if header is None:
@@ -38,10 +37,15 @@ def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     return (load, init, play, header.name, header.author, header.released, image.image)
 
 
-def parse(data: bytes) -> Song:
-    """Parse a PSID/RSID/.prg byte string into a :class:`Song`."""
+def parse(data: bytes, validate: bool = False) -> Song:
+    """Parse a PSID/RSID/.prg byte string into a :class:`Song`.
+
+    With ``validate``, every sequence, pattern and instrument the player reaches
+    must parse as its :mod:`~pyfuturecomposer.streams` grammar rule, else
+    :class:`~pyfuturecomposer.errors.SidParseError`.
+    """
     load, init, play, name, author, released, image = _parse_container(data)
-    return Song(
+    song = Song(
         image=image,
         load=load,
         init=init,
@@ -50,11 +54,15 @@ def parse(data: bytes) -> Song:
         author=author,
         released=released,
     )
+    if validate:
+        for _ in streams(song):
+            pass
+    return song
 
 
-def read(source) -> Song:
+def read(source, validate: bool = False) -> Song:
     """Read a Future Composer tune from a path, bytes or binary file object."""
-    return parse(read_bytes(source))
+    return parse(read_bytes(source), validate)
 
 
 class FutureComposerSidParser(BaseSidParser):
@@ -67,9 +75,9 @@ class FutureComposerSidParser(BaseSidParser):
 
     error_class: type = SidParseError
 
-    def parse(self, data: bytes, **_kwargs: Any) -> Song:
+    def parse(self, data: bytes, **kwargs: Any) -> Song:
         """Decode raw ``.sid``/``.prg`` ``data`` into a :class:`Song`."""
-        return parse(data)
+        return parse(data, bool(kwargs.get("validate")))
 
     def recognize(self, image):
         """Return the C64 address of the FC player signature, or ``None``.

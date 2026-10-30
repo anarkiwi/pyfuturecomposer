@@ -505,8 +505,8 @@ class FutureComposerPlayer(MemPlayer):
         self.wset(0x02CC, self._rd(0x00FF))
         c299 = self.vget(0x0299, x)
         d6_thresh = self._rd(self.t_filter + 11)
-        if c299 >= d6_thresh:  # 1c33
-            self._filter_walk_1c33(x)
+        if c299 >= d6_thresh:  # 1c33 with Y=$0b
+            self._filter_walk_1c33(x, 5)
             self._wave_arp(x, ad)
             return
         yy = 0x0A
@@ -524,7 +524,7 @@ class FutureComposerPlayer(MemPlayer):
             tv = self._rd(self.t_filter + 6)
             if c299 >= tv:  # 1c15
                 self._filter_resonance()
-                self._filter_walk_1c33(x)
+                self._filter_walk_1c33(x, 0)
             else:
                 self._wave_arp(x, ad)
                 return
@@ -540,8 +540,8 @@ class FutureComposerPlayer(MemPlayer):
         if (xc9 & bf) == 0:
             self._wr(SID_REG_BASE + 0x17, (xc9 + bf) & 0xFF)
 
-    def _filter_walk_1c33(self, x: int) -> None:
-        self._filter_cutoff_write(x, self._rd(self.t_filter + 0))
+    def _filter_walk_1c33(self, x: int, index: int) -> None:
+        self._filter_cutoff_write(x, self._rd(self.t_filter + index))
 
     def _filter_walk_1c3e(self, x: int, yy: int) -> None:
         ny = (yy - 6) & 0xFF

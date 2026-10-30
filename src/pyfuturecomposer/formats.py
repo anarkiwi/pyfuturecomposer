@@ -18,6 +18,7 @@ from pyfuturecomposer import layout, writer
 from pyfuturecomposer.model import Song
 from pyfuturecomposer.player import FutureComposerPlayer
 from pyfuturecomposer.reader import FutureComposerSidParser, read
+from pyfuturecomposer.streams import GRAMMAR, streams
 
 
 def _metadata(song: Song) -> Sequence:
@@ -65,6 +66,8 @@ FORMAT = SidFormat(
     metadata=_metadata,
     variant=layout.variant,
     facet_sites=lambda song: layout.sites(layout.variant(song)),
+    grammar=GRAMMAR,
+    streams=streams,
     commands=(
         FormatCommand(
             "export",
