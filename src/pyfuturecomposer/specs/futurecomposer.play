@@ -145,7 +145,7 @@ machine voice[x in 0..3] {
     sid[u16(ad) + 1] := freq_hi_tab[noteidx];
   }
 
-  proc lab_19bb() {
+  proc end_of_pattern() {
     pat_pos[x] := 0;
     let advance = true;
     if rcnt[x] != 0 {
@@ -158,6 +158,10 @@ machine voice[x in 0..3] {
     if advance {
       seq_pos[x] += 1;
     }
+  }
+
+  proc lab_19bb() {
+    end_of_pattern();
     lab_1d35();
   }
 
@@ -176,7 +180,7 @@ machine voice[x in 0..3] {
     let b = pattern_byte(cpu.y);
   }
 
-  proc lab_193a(f8: u8) {
+  proc note_row(f8: u8) {
     let ad = wad;
     dur_cnt[x] := dur[x];
     let noteidx = f8 + trans[x];
@@ -208,12 +212,19 @@ machine voice[x in 0..3] {
       dir[x] := 1;
       aux[x] := aux_v;
     }
+  }
+
+  proc row_advance() {
     let cur = pat_pos[x] + 1;
     pat_pos[x] := cur;
     if ind(0xFD, cur) == 0xFF {
-      lab_19bb();
-      return;
+      end_of_pattern();
     }
+  }
+
+  proc lab_193a(f8: u8) {
+    note_row(f8);
+    row_advance();
     lab_1d35();
   }
 

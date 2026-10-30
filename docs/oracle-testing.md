@@ -47,7 +47,7 @@ tune without the FC player signature raises `FutureComposerParseError` (a
 `pysidtracker.SidParseError`), which the survey records as `not_decompiled`.
 
 ```bash
-pip install "pysidtracker[survey]>=0.45.0"
+pip install "pysidtracker[survey]>=0.46.0"
 python -m pysidtracker.survey find $HVSC --player '^mon/futurecomposer$' --out .hvsc-survey/tunes.csv
 PYTHONPATH=scripts python -m pysidtracker.survey run $HVSC .hvsc-survey/tunes.csv \
     --work .hvsc-survey --render oracle_hvsc:render --jobs 32
@@ -83,10 +83,12 @@ for all initial memory (`pysidtracker.playspec.tv.validate`):
 - a spec with a wrong seed byte is refuted, and `tv.replay` reproduces the
   counterexample on the CPU (marked `oracle`).
 
-The row/pattern reader at `$19d0` is not provable as a routine. Its end-of-pattern
-path falls into the voice loop, which returns only when the voice index in `$FF`
-is 0, and `validate` takes no precondition on memory. The spec still has it as
-`voice[x].read_pattern_byte`.
+- `voice[x].row_advance` against `$19af..$1d35` for each voice (default suite): the
+  pattern position step and the end-of-pattern test, proved as a stretch with
+  `validate(..., stop=0x1d35)`.
+
+The note-row loader before `$19af` is not provable: it reloads the voice index
+from `$FF`, and `validate` takes no precondition on memory.
 
 ## Tunes that still diverge
 

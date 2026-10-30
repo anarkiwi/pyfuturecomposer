@@ -9,6 +9,8 @@ from pyfuturecomposer.player import binding, spec, spec_source
 
 REINIT = ("clock.reinit", 0x1D74)
 COLD_INIT = ("clock.cold_init", 0x1D65)
+ROW_ADVANCE = 0x19AF
+ROW_RETURN = 0x1D35
 SEED_ADDRESS = 0x02C9
 
 
@@ -23,6 +25,21 @@ def test_reinit_equals_the_6502_routine(reference):
     values, image = reference
     routine, pc = REINIT
     result = validate(spec(), values, routine, image, pc)
+    assert result.proven, result.counterexample
+
+
+@pytest.mark.parametrize("voice", range(3))
+def test_row_advance_equals_the_6502_stretch(reference, voice):
+    values, image = reference
+    result = validate(
+        spec(),
+        values,
+        f"voice[{voice}].row_advance",
+        image,
+        ROW_ADVANCE,
+        registers={"X": voice},
+        stop=ROW_RETURN,
+    )
     assert result.proven, result.counterexample
 
 
