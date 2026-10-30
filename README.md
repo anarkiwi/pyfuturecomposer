@@ -2,8 +2,8 @@
 
 Pure-Python reader and player for
 [Future Composer](https://en.wikipedia.org/wiki/Future_Composer) (MoN / Deenen)
-C64 SID songs, with byte-exact per-frame SID register output and optional WAV
-rendering through an emulated SID.
+C64 SID songs, with per-frame SID register output (byte-exact against the
+reference build's oracle) and optional WAV rendering through an emulated SID.
 
 Consumes `.sid` files (PSID/RSID containers) and bare `.prg` images through the
 shared [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) base. A code

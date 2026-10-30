@@ -8,10 +8,10 @@ compare machinery is the shared base (see the base package's
 [oracle-testing docs](https://github.com/anarkiwi/pysidtracker/blob/main/docs/oracle-testing.md)).
 
 ```python
-tune_id, oracle_match = make_oracle_fixtures(
-    TUNES, player=FutureComposerPlayer, frames=250
-)
+tune_id, oracle_match = make_oracle_fixtures(TUNES, player=FutureComposerPlayer)
 ```
+
+The comparison covers the start song's whole length (`pysidtracker.song_frames`).
 
 A mismatch fails with pysidtracker's
 [whydiff](https://github.com/anarkiwi/pysidtracker/blob/main/docs/whydiff.md)
