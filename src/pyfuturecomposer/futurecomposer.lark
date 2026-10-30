@@ -20,7 +20,8 @@ ROW: /[\xf0-\xfe]/
 PAT_END: "\xff"
 FIRST_ROW: "\xff"
 
-sequence: _modifier* step (step | _modifier)* _stop _TAIL?
+sequence: _entry* (_stop _TAIL?)?
+_entry: step | _modifier
 step: PAT
 _modifier: repeat | transpose
 repeat: REPEAT

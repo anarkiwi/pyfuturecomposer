@@ -86,7 +86,7 @@ class FutureComposerPlayer(SpecPlayer):
     """The Future Composer play routine over a parsed :class:`Song`.
 
     Tables, work area and self-modified operands are placed by :attr:`variant`
-    (:func:`pyfuturecomposer.layout.detect`).  With ``validate`` every sequence,
+    (:func:`pyfuturecomposer.layout.detect`).  With ``validate`` (the default) every sequence,
     pattern and instrument the routine opens must parse as its
     :data:`pyfuturecomposer.streams.GRAMMAR` rule, else the frame raises
     :class:`~pyfuturecomposer.errors.FutureComposerParseError`.
@@ -96,7 +96,7 @@ class FutureComposerPlayer(SpecPlayer):
         self,
         source: Union[Song, bytes, bytearray],
         subtune: int = 0,
-        validate: bool = False,
+        validate: bool = True,
     ):
         song = source if isinstance(source, Song) else parse_song(bytes(source))
         self.song = song
