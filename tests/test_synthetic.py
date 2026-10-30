@@ -9,6 +9,8 @@ end-of-song / hard-freq paths -- exercising the real player code with crafted DA
 (no byte-exact oracle needed; the assertion is "the engine runs and emits writes").
 """
 
+from dataclasses import replace
+
 import pytest
 
 from pyfuturecomposer import (
@@ -210,3 +212,12 @@ def test_player_boots_the_tunes_own_init():
     assert (
         FutureComposerPlayer(song)._rd(0x02C9) == 0x5A
     )  # pylint: disable=protected-access
+
+
+def test_sid_registers_are_addressed_with_16_bit_arithmetic():
+    song = _build(0x00, _NOTE_PATTERN)
+    img = bytearray(song.image)
+    img[c.OFF_VOICE_BASE] = 0xFC
+    player = FutureComposerPlayer(replace(song, image=bytes(img)), validate=False)
+    player.play_frame()
+    assert player._rd(0xD400 + 0xFC + 4) == 0x41  # pylint: disable=protected-access
