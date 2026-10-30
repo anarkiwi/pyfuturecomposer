@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfuturecomposer"
-version = "0.6.0"
+version = "0.7.0"
 description = "Pure-Python reader and player for Future Composer (MoN/Deenen) SID songs"
 readme = "README.md"
 requires-python = ">=3.11"
