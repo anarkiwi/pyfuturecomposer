@@ -83,10 +83,18 @@ class FutureComposerPlayer(SpecPlayer):
     """The Future Composer play routine over a parsed :class:`Song`.
 
     Tables, work area and self-modified operands are placed by :attr:`variant`
-    (:func:`pyfuturecomposer.layout.detect`).
+    (:func:`pyfuturecomposer.layout.detect`).  With ``validate`` every sequence,
+    pattern and instrument the routine opens must parse as its
+    :data:`pyfuturecomposer.streams.GRAMMAR` rule, else the frame raises
+    :class:`~pyfuturecomposer.errors.FutureComposerParseError`.
     """
 
-    def __init__(self, source: Union[Song, bytes, bytearray], subtune: int = 0):
+    def __init__(
+        self,
+        source: Union[Song, bytes, bytearray],
+        subtune: int = 0,
+        validate: bool = False,
+    ):
         song = source if isinstance(source, Song) else parse_song(bytes(source))
         self.song = song
         self.variant = layout.variant(song)
@@ -103,6 +111,7 @@ class FutureComposerPlayer(SpecPlayer):
             subtune,
             bind=lambda _view, _entry: values,
             entries=lambda _view: {song.play, play_entry},
+            validate=validate,
         )
 
     @property
@@ -115,3 +124,8 @@ class FutureComposerPlayer(SpecPlayer):
             super()._frame()
         except SpecRuntimeError as exc:
             raise FutureComposerParseError(_bound_loop(exc)) from exc
+        if self.validator is not None:
+            for (rule, base), message in self.validator.failures().items():
+                raise FutureComposerParseError(
+                    f"stream at ${base:04x} is not {rule.rsplit(':', 1)[1]}: {message}"
+                )

@@ -253,3 +253,19 @@ def test_tables_in_the_io_area_are_not_readable_as_ram():
     song = replace(base, load=0xD000, init=0xD000, play=0xD006)
     with pytest.raises(FutureComposerParseError, match="I/O area"):
         list(streams(song))
+
+
+def test_spec_player_checks_every_stream_kind_it_opens(tune_path):
+    player = FutureComposerPlayer(parse(tune_path.read_bytes()), validate=True)
+    for _ in range(300):
+        player.play_frame()
+    opened = {ref.rsplit(":", 1)[1] for ref, _base in player.validator.results}
+    assert opened == {"sequence", "pattern", "instrument"}
+    assert not player.validator.failures()
+
+
+def test_unterminated_pattern_is_played_unless_validated():
+    song = _build(0x00, (0x0C,) * 0x100)
+    FutureComposerPlayer(song).play_frame()
+    with pytest.raises(FutureComposerParseError, match="pattern"):
+        FutureComposerPlayer(song, validate=True).play_frame()
