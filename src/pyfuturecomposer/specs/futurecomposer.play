@@ -222,6 +222,11 @@ machine voice[x in 0..3] {
     }
   }
 
+  proc tv_note_row() {
+    note_row(zp_f8);
+    row_advance();
+  }
+
   proc lab_193a(f8: u8) {
     note_row(f8);
     row_advance();

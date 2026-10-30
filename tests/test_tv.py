@@ -1,6 +1,7 @@
 """Translation validation: spec routines against the reference tune's 6502 code."""
 
 import pytest
+import z3
 from pysidtracker.playspec import parse
 from pysidtracker.playspec.tv import replay, validate
 
@@ -9,7 +10,8 @@ from pyfuturecomposer.player import binding, spec, spec_source
 
 REINIT = ("clock.reinit", 0x1D74)
 COLD_INIT = ("clock.cold_init", 0x1D65)
-ROW_ADVANCE = 0x19AF
+NOTE_ROW = 0x193A
+VOICE_INDEX = 0xFF
 ROW_RETURN = 0x1D35
 SEED_ADDRESS = 0x02C9
 
@@ -29,16 +31,17 @@ def test_reinit_equals_the_6502_routine(reference):
 
 
 @pytest.mark.parametrize("voice", range(3))
-def test_row_advance_equals_the_6502_stretch(reference, voice):
+def test_note_row_equals_the_6502_stretch(reference, voice):
     values, image = reference
     result = validate(
         spec(),
         values,
-        f"voice[{voice}].row_advance",
+        f"voice[{voice}].tv_note_row",
         image,
-        ROW_ADVANCE,
+        NOTE_ROW,
         registers={"X": voice},
         stop=ROW_RETURN,
+        assume=[lambda mem, _regs: mem[z3.BitVecVal(VOICE_INDEX, 16)] == voice],
     )
     assert result.proven, result.counterexample
 
