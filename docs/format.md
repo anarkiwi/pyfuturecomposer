@@ -105,19 +105,23 @@ operands, so this exporter does not re-relocate them to `$1800`.
 
 ## Player and playback notes
 
-`FutureComposerPlayer` is a `pysidtracker.MemPlayer`: the base owns the flat
-64 KiB 6502 memory, the `$D400` register snapshot/diff, and the `iter_frames` /
-`render_grid` drivers. When the play entry is recognised, `_init` starts from
-memory after the tune's own init (`pysidtracker.oracle.boot_flat`, which passes
-the subtune in `A`). Otherwise it runs the transcribed cold init. `_frame` is
-an integer transcription of Future Composer's `entry_1806` 6502 play routine:
-the tempo divider, the per-voice DEC-duration row advance, the opcode-stream
-SEQUENCE and PATTERN walks, and the per-frame modulation engine. That engine
-covers slide-target vibrato and portamento, the `$E0` glide, a 16-bit
-pulse-width sweep, the filter-cutoff program and the wave / arp tables. Work
-bytes go through the variant's `work` base. The self-modified operands (the
-glide delay and the wave-program table pointers) are read back from memory, as
-the 6502 reads them.
+`FutureComposerPlayer` is a `pysidtracker.playspec.SpecPlayer`. It runs the
+tune's own init on the emulated 6502, then each play call runs
+`src/pyfuturecomposer/specs/futurecomposer.play` on the memory the init left.
+The spec states Future Composer's `entry_1806` play routine: the tempo divider
+(machine `clock`), and per voice (machine `voice[x]`) the DEC-duration row
+advance, the opcode-stream sequence and pattern walks, and the per-frame
+modulation engine. That engine covers slide-target vibrato and portamento, the
+`$E0` glide, a 16-bit pulse-width sweep, the filter-cutoff program and the
+wave / arp tables. `layout.detect` supplies the spec's `layout` block
+(`player.binding`): each table and self-modified operand address, and the work
+base. The work area, the self-modified operands and the zero-page scratch
+bytes are cells in the spec, so after every call the full 64 KiB outside the
+stack page equals the tune's own 6502 run for the reference build.
+
+`pysidtracker playspec check src/pyfuturecomposer/specs/futurecomposer.play`
+type-checks the spec. A loop that runs past its bound, such as a sequence that
+never reaches a pattern, raises `FutureComposerParseError`.
 
 `iter_register_writes(song, max_frames=..) -> (clock, reg, val)` is the shared
 `py*` register-log surface (via `pysidtracker.reglog.register_writes_from_player`,

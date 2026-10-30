@@ -22,9 +22,14 @@ from pyfuturecomposer import constants as c
 LOAD = 0x1800
 
 
+# init: clear the work area $0278..$02DA, seed $02C9 (route filter), RTS.
+_INIT = bytes.fromhex("A900A2639D77 02CAD0FAA9B08DC902 60".replace(" ", ""))
+
+
 def _blank_image() -> bytearray:
     # Cover load..$1f29 (the inline-table region) so every table read is in-image.
     img = bytearray(0x800)
+    img[: len(_INIT)] = _INIT
     return img
 
 
@@ -173,7 +178,8 @@ def _glide_onset(threshold):
     )
     player = FutureComposerPlayer(_build(0x00, pattern))
     grid = player.render_grid(40)
-    assert player._rd(player.a_slide) == threshold  # pylint: disable=protected-access
+    slide = LOAD + player.variant.resolve().slide
+    assert player._rd(slide) == threshold  # pylint: disable=protected-access
     onset = next(i for i, row in enumerate(grid) if row[0])
     assert grid[onset][0] == 0x100 - 0x30
     return onset
@@ -197,14 +203,10 @@ def test_wave_program_reads_through_operand_words(ctrl):
     assert (0x05 + 0x0D, ctrl) in {(row[1], row[4]) for row in grid}
 
 
-def test_cold_init_clears_work_area():
-    load = 0x0200
-    song = Song(image=b"\xaa" * 0x800, load=load, init=load, play=load + 6)
-    player = FutureComposerPlayer(song)
-    assert player.variant.source("play").kind == "default"
-    mem = bytes(
-        player._rd(a) for a in range(0x0277, 0x02DC)
+def test_player_boots_the_tunes_own_init():
+    init = bytes.fromhex("A95A8DC90260")  # LDA #$5A; STA $02C9; RTS
+    image = init + bytes(0x7FA)
+    song = Song(image=image, load=0x1800, init=0x1800, play=0x1806)
+    assert (
+        FutureComposerPlayer(song)._rd(0x02C9) == 0x5A
     )  # pylint: disable=protected-access
-    work = bytearray(c.WORK_SIZE)
-    work[0x02C9 - c.WORK_BASE] = c.FILTER_ROUTE_SEED
-    assert mem == b"\xaa" + bytes(work) + b"\xaa"

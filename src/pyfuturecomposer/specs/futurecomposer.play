@@ -1,0 +1,632 @@
+spec futurecomposer;
+
+layout {
+  work, freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, voice_base, tempo,
+  pw_step, filter, wave_arp, arp_delay, wave_prog_ptr, mod, slide, pw_carry,
+  filt_lo, filt_hi, wave_ctrl, wave_pitch: addr;
+  voices: list;
+}
+
+cell sid: u8[0x19] @ 0xD400 out;
+
+cell zp_f8: u8 @ 0xF8 scratch;
+cell zp_f9: u8 @ 0xF9 scratch;
+cell zp_fa: u8 @ 0xFA scratch;
+cell zp_fb: u8 @ 0xFB scratch;
+cell zp_fc: u8 @ 0xFC scratch;
+cell zp_fd: u8 @ 0xFD scratch;
+cell zp_fe: u8 @ 0xFE scratch;
+cell zp_ff: u8 @ 0xFF scratch;
+cell zp_41: u8 @ 0x41 scratch;
+
+cell work_area: u8[0x63] @ L.work;
+cell seq_pos: u8[3] @ L.work + 0x00;
+cell pat_pos: u8[3] @ L.work + 0x03;
+cell dur_cnt: u8[3] @ L.work + 0x06;
+cell dur: u8[3] @ L.work + 0x09;
+cell wf: u8[3] @ L.work + 0x0C;
+cell note: u8[3] @ L.work + 0x0F;
+cell instr_id: u8[3] @ L.work + 0x12;
+cell fhi: u8[3] @ L.work + 0x15;
+cell fhi0: u8[3] @ L.work + 0x18;
+cell flo: u8[3] @ L.work + 0x1B;
+cell slide_mode: u8[3] @ L.work + 0x1E;
+cell cnt: u8[3] @ L.work + 0x21;
+cell pwlo: u8[3] @ L.work + 0x24;
+cell pwhi: u8[3] @ L.work + 0x27;
+cell pctrl: u8[3] @ L.work + 0x2A;
+cell a5: u8 @ L.work + 0x2D;
+cell trans: u8[3] @ L.work + 0x2E;
+cell x8: u8 @ L.work + 0x31;
+cell vibc: u8 @ L.work + 0x32;
+cell ab: u8 @ L.work + 0x33;
+cell ac: u8 @ L.work + 0x34;
+cell wad: u8 @ L.work + 0x35;
+cell ae: u8 @ L.work + 0x36;
+cell va: u8[3] @ L.work + 0x37;
+cell vb2: u8[3] @ L.work + 0x3A;
+cell vb5: u8[3] @ L.work + 0x3D;
+cell vb8: u8[3] @ L.work + 0x40;
+cell bb: u8 @ L.work + 0x43;
+cell bc: u8 @ L.work + 0x44;
+cell be: u8 @ L.work + 0x46;
+cell bf: u8 @ L.work + 0x47;
+cell fc0: u8[3] @ L.work + 0x48;
+cell aux: u8[3] @ L.work + 0x4B;
+cell dir: u8[3] @ L.work + 0x4E;
+cell c9: u8 @ L.work + 0x51;
+cell ca: u8 @ L.work + 0x52;
+cell st: u8 @ L.work + 0x53;
+cell cc: u8 @ L.work + 0x54;
+cell rcnt: u8[3] @ L.work + 0x55;
+cell d0: u8[3] @ L.work + 0x58;
+cell d3: u8 @ L.work + 0x5B;
+cell d4: u8 @ L.work + 0x5C;
+cell d5: u8 @ L.work + 0x5D;
+cell d6: u8 @ L.work + 0x5E;
+cell d7: u8[3] @ L.work + 0x5F;
+
+cell freq_lo_tab: u8[256] @ L.freq_lo ro;
+cell freq_hi_tab: u8[256] @ L.freq_hi ro;
+cell seq_lo_tab: u8[3] @ L.seq_lo ro;
+cell seq_hi_tab: u8[3] @ L.seq_hi ro;
+cell pat_tab: u8[256] @ L.pat_ptr ro;
+cell instr_tab: u8[264] @ L.instr ro;
+cell mod_tab: u8[264] @ L.mod ro;
+cell voice_tab: u8[3] @ L.voice_base ro;
+cell speed: u8 @ L.tempo ro;
+cell pw_step_tab: u8[32] @ L.pw_step ro;
+cell filt: u8[12] @ L.filter ro;
+cell wave_arp_tab: u8[4] @ L.wave_arp ro;
+cell arp_delay_tab: u8[256] @ L.arp_delay ro;
+cell wprog: u8[24] @ L.wave_prog_ptr ro;
+
+cell slide_imm: u8 @ L.slide operand;
+cell pw_carry_imm: u8 @ L.pw_carry operand;
+cell filt_lo_op: u8 @ L.filt_lo operand;
+cell filt_hi_op: u8 @ L.filt_hi operand;
+cell wave_ctrl_op: u16 @ L.wave_ctrl operand;
+cell wave_pitch_op: u16 @ L.wave_pitch operand;
+
+machine clock {
+  signal run: bool = false;
+
+  proc reinit() {
+    for k in 0..3 {
+      cnt[k] := 0;
+      seq_pos[k] := 0;
+      pat_pos[k] := 0;
+      dur_cnt[k] := 0;
+      note[k] := 0;
+    }
+    st := 0;
+  }
+
+  proc cold_init() {
+    for k in 0..0x63 {
+      work_area[k] := 0;
+    }
+    c9 := 0xB0;
+    reinit();
+  }
+
+  step {
+    if st == 2 {
+      return;
+    }
+    if st == 1 {
+      reinit();
+      return;
+    }
+    for k in 0..3 {
+      cnt[k] += 1;
+    }
+    sid[0x18] := 0x1F;
+    let dec = ca - 1;
+    if neg(dec) {
+      dec := speed;
+    }
+    ca := dec;
+    run := true;
+  }
+}
+
+machine voice[x in 0..3] {
+  proc lab_1d35() {
+    sid[wad + 4] := d0[x];
+  }
+
+  proc lab_1d25(ad: u8, noteidx: u8) {
+    sid[ad] := freq_lo_tab[noteidx];
+    sid[ad + 1] := freq_hi_tab[noteidx];
+  }
+
+  proc lab_19bb() {
+    pat_pos[x] := 0;
+    let advance = true;
+    if rcnt[x] != 0 {
+      let nrc = rcnt[x] - 1;
+      rcnt[x] := nrc;
+      if !neg(nrc) {
+        advance := false;
+      }
+    }
+    if advance {
+      seq_pos[x] += 1;
+    }
+    lab_1d35();
+  }
+
+  proc pattern_byte(y: u8) -> u8 {
+    pat_pos[x] += 1;
+    let b = ind(0xFD, y + 1);
+    if b == 0xFF {
+      lab_19bb();
+    } else {
+      zp_f8 := b;
+    }
+    return b;
+  }
+
+  proc read_pattern_byte() {
+    let b = pattern_byte(cpu.y);
+  }
+
+  proc lab_193a(f8: u8) {
+    let ad = wad;
+    dur_cnt[x] := dur[x];
+    let noteidx = f8 + trans[x];
+    note[x] := noteidx;
+    let lo = freq_lo_tab[noteidx];
+    let hi = freq_hi_tab[noteidx];
+    sid[ad + 1] := hi;
+    fhi[x] := hi;
+    fhi0[x] := hi;
+    sid[ad] := lo;
+    flo[x] := lo;
+    if d7[x] == 0 {
+      let ins = instr_id[x] << 3;
+      x8 := ins;
+      sid[ad + 5] := instr_tab[u16(ins) + 2];
+      sid[ad + 6] := instr_tab[u16(ins) + 3];
+      let aux_v = instr_tab[u16(ins) + 4];
+      let pulse_ctrl = instr_tab[u16(ins)];
+      let wave = instr_tab[u16(ins) + 1];
+      wf[x] := wave;
+      d0[x] := wave;
+      sid[ad + 2] := 0;
+      pwlo[x] := 0;
+      pctrl[x] := pulse_ctrl;
+      let pw_hi = pulse_ctrl & 0x0F;
+      sid[ad + 3] := pw_hi;
+      pwhi[x] := pw_hi;
+      dir[x] := 1;
+      aux[x] := aux_v;
+    }
+    let cur = pat_pos[x] + 1;
+    pat_pos[x] := cur;
+    if ind(0xFD, cur) == 0xFF {
+      lab_19bb();
+      return;
+    }
+    lab_1d35();
+  }
+
+  proc pattern_walk() {
+    let cur = pat_pos[x];
+    while true bound 600 {
+      let f8 = ind(0xFD, cur);
+      zp_f8 := f8;
+      if (f8 & 0xF0) == 0xF0 {
+        d7[x] := 1;
+        cur := cur + 1;
+        pat_pos[x] := cur;
+        f8 := ind(0xFD, cur);
+        zp_f8 := f8;
+        lab_193a(f8);
+        return;
+      }
+      d7[x] := 0;
+      if (f8 & 0xF0) == 0xE0 {
+        slide_mode[x] := (f8 & 1) + 1;
+        bc := (f8 & 0x0E) >> 1;
+        cur := cur + 1;
+        pat_pos[x] := cur;
+        let nb = ind(0xFD, cur);
+        bb := nb & 0xF0;
+        slide_imm := nb & 0x0F;
+        cur := cur + 1;
+        pat_pos[x] := cur;
+        f8 := ind(0xFD, cur);
+        zp_f8 := f8;
+      }
+      if (f8 & 0xE0) == 0xC0 {
+        instr_id[x] := f8 & 0x1F;
+        let b = pattern_byte(cur);
+        cur := cur + 1;
+        if b == 0xFF {
+          return;
+        }
+        f8 := b;
+      }
+      if (f8 & 0xC0) == 0x80 {
+        dur[x] := f8 & 0x3F;
+        let b = pattern_byte(cur);
+        cur := cur + 1;
+        if b == 0xFF {
+          return;
+        }
+      } else {
+        lab_193a(f8);
+        return;
+      }
+    }
+  }
+
+  proc sequence_walk() {
+    let b = 0;
+    let searching = true;
+    while searching bound 1024 {
+      b := ind(0xFB, seq_pos[x]);
+      if b == 0xFE {
+        for k in 0..0x18 {
+          sid[k] := 0;
+        }
+        st := 2;
+        return;
+      }
+      if b == 0xFF {
+        dur_cnt[x] := 0;
+        seq_pos[x] := 0;
+        pat_pos[x] := 0;
+        c9 := 0;
+      } else {
+        be := b;
+        if (b & 0x80) != 0 {
+          trans[x] := b & 0x1F;
+          seq_pos[x] += 1;
+        } elif (b & 0x40) != 0 {
+          rcnt[x] := b & 0x3F;
+          seq_pos[x] += 1;
+        } else {
+          searching := false;
+        }
+      }
+    }
+    let y = b << 1;
+    let pat_lo = pat_tab[y];
+    let pat_hi = pat_tab[y + 1];
+    zp_fd := pat_lo;
+    zp_fe := pat_hi;
+    slide_mode[x] := 0;
+    cnt[x] := 0;
+    vb8[x] := 3;
+    pattern_walk();
+  }
+
+  proc filter_cutoff_write(val: u8) {
+    fc0[x] := val;
+    sid[0x16] := val;
+  }
+
+  proc filter_resonance() {
+    let a = zp_ff << 1;
+    if a == 0 {
+      a := a + 1;
+    }
+    bf := a;
+    if (c9 & a) == 0 {
+      sid[0x17] := c9 + a;
+    }
+  }
+
+  proc arp_delay_step(ad: u8) {
+    let nb8 = vb8[x] - 1;
+    vb8[x] := nb8;
+    if neg(nb8) {
+      vb8[x] := 2;
+    }
+    let delay = arp_delay_tab[vb8[x]];
+    zp_41 := delay;
+    lab_1d25(ad, note[x] + delay);
+  }
+
+  proc wave_program(ad: u8) {
+    let d2aa = vibc;
+    let y = d2aa & 0x0F;
+    wave_ctrl_op := word(wprog[y], wprog[y + 2]);
+    wave_pitch_op := word(wprog[y + 4], wprog[y + 6]);
+    if cnt[x] >= 0x0F {
+      lab_1d35();
+      return;
+    }
+    let idx = cnt[x] - 1;
+    d0[x] := mem[wave_ctrl_op + u16(idx)];
+    let pitch = mem[wave_pitch_op + u16(idx)];
+    bf := pitch;
+    if (d2aa & 0x10) != 0 {
+      lab_1d25(ad, note[x] + pitch);
+    } else {
+      sid[ad + 1] := pitch + 0x0D;
+      sid[ad] := 0;
+    }
+    lab_1d35();
+  }
+
+  proc wave_arp_step(ad: u8) {
+    let acv = ac;
+    if (acv & 0x10) == 0 {
+      if (acv & 0x80) != 0 {
+        if cnt[x] < 2 {
+          sid[ad + 1] := 0x48;
+          sid[ad] := 0;
+          d0[x] := 0x81;
+          lab_1d35();
+          return;
+        }
+        sid[ad] := flo[x];
+        sid[ad + 1] := fhi[x];
+        d0[x] := wf[x] & 0xFE;
+      }
+      if (acv & 4) != 0 {
+        arp_delay_step(ad);
+      }
+      lab_1d35();
+      return;
+    }
+    wave_program(ad);
+  }
+
+  proc filter_program(ad: u8) {
+    if (ac & 1) == 0 {
+      if zp_ff == cc {
+        filter_cutoff_write(0xFF);
+      }
+      wave_arp_step(ad);
+      return;
+    }
+    cc := zp_ff;
+    zp_f9 := lo(L.filter);
+    zp_fa := hi(L.filter);
+    let c299 = cnt[x];
+    if c299 >= filt[11] {
+      filter_cutoff_write(filt[5]);
+      wave_arp_step(ad);
+      return;
+    }
+    let yy = 0x0A;
+    let handled = false;
+    let searching = true;
+    while searching bound 5 {
+      if c299 >= filt[yy] {
+        filter_cutoff_write(fc0[x] + filt[yy - 6]);
+        handled := true;
+        searching := false;
+      } else {
+        yy := yy - 1;
+        if yy == 6 {
+          searching := false;
+        }
+      }
+    }
+    if !handled {
+      if c299 >= filt[6] {
+        filter_resonance();
+        filter_cutoff_write(filt[0]);
+      } else {
+        wave_arp_step(ad);
+        return;
+      }
+    }
+    wave_arp_step(ad);
+  }
+
+  proc pw_write(ad: u8) {
+    pw_carry_imm := 0;
+    if (pctrl[x] & 0x80) != 0 && (cnt[x] & 1) != 0 {
+      pw_carry_imm := 0xB0;
+    }
+    let imm = pw_carry_imm;
+    sid[ad + 2] := pwlo[x] + imm;
+    sid[ad + 3] := pwhi[x] + u8(carry(pwlo[x], imm));
+    if (ac & 0x40) != 0 && cnt[x] >= 3 {
+      d0[x] := wave_arp_tab[cnt[x] & 3];
+    }
+    be := ad;
+    filter_program(ad);
+  }
+
+  proc pw_sweep(ad: u8) {
+    let d2ab = ab;
+    if d2ab != 0 {
+      let yy = ((d2ab & 7) - 1) << 2;
+      let c299 = cnt[x];
+      if pw_step_tab[yy] < c299 {
+        let yy2 = yy + 2;
+        if pw_step_tab[yy2] < c299 {
+          a5 := d2ab & 0xFC;
+        } else {
+          a5 := pw_step_tab[yy2 + 1];
+        }
+      } else {
+        a5 := pw_step_tab[yy + 1];
+      }
+      let step = a5;
+      if dir[x] == 0 {
+        let lo_v = pwlo[x];
+        pwlo[x] := lo_v - step;
+        let n = pwhi[x] - u8(borrow(lo_v, step));
+        pwhi[x] := n;
+        if n < 1 {
+          dir[x] := 1;
+        }
+      } else {
+        let lo_v = pwlo[x];
+        pwlo[x] := lo_v + step;
+        let n = pwhi[x] + u8(carry(lo_v, step));
+        pwhi[x] := n;
+        if n >= 0x0F {
+          dir[x] := 0;
+        }
+      }
+    }
+    pw_write(ad);
+  }
+
+  proc slide_step(ad: u8) {
+    let diff = dur[x] - dur_cnt[x];
+    if diff >= slide_imm && slide_mode[x] != 0 {
+      if (slide_mode[x] & 3) == 1 {
+        let lo_v = flo[x];
+        flo[x] := lo_v + bb;
+        sid[ad] := lo_v + bb;
+        let n = fhi[x] + bc + u8(carry(lo_v, bb));
+        fhi[x] := n;
+        sid[ad + 1] := n;
+      } else {
+        let lo_v = flo[x];
+        flo[x] := lo_v - bb;
+        sid[ad] := lo_v - bb;
+        let n = fhi[x] - bc - u8(borrow(lo_v, bb));
+        fhi[x] := n;
+        sid[ad + 1] := n;
+      }
+    }
+    pw_sweep(ad);
+  }
+
+  proc slide_target() {
+    let y = note[x];
+    let flo_y1 = freq_lo_tab[y + 1];
+    let flo_y = freq_lo_tab[y];
+    d6 := flo_y1 - flo_y;
+    let borrow_lo = borrow(flo_y1, flo_y);
+    let fhi_y1 = freq_hi_tab[y + 1];
+    let fhi_y = freq_hi_tab[y];
+    let a = (fhi_y1 - fhi_y - u8(borrow_lo) + cnt[x]
+      + u8(!borrow(fhi_y1, fhi_y, borrow_lo))) >> 1;
+    let more = true;
+    while more bound 10 {
+      let ae1 = ae - 1;
+      ae := ae1;
+      if neg(ae1) {
+        more := false;
+      } else {
+        let carry_in = a & 1;
+        a := a >> 1;
+        d6 := (d6 >> 1) | (carry_in << 7);
+      }
+    }
+    d5 := a;
+    d3 := flo_y;
+    d4 := fhi_y;
+    let yy = va[x] >> 1;
+    more := true;
+    while more bound 10 {
+      yy := yy - 1;
+      if neg(yy) {
+        more := false;
+      } else {
+        let d3v = d3;
+        d3 := d3v - d6;
+        d4 := d4 - d5 - u8(borrow(d3v, d6));
+      }
+    }
+    if cnt[x] >= 4 {
+      yy := vb5[x];
+      more := true;
+      while more bound 130 {
+        yy := yy - 1;
+        if neg(yy) {
+          more := false;
+        } else {
+          let d3v = d3;
+          d3 := d3v + d6;
+          d4 := d4 + d5 + u8(carry(d3v, d6));
+        }
+      }
+      sid[wad] := d3;
+      sid[wad + 1] := d4;
+    }
+  }
+
+  proc vibrato(vib: u8) {
+    va[x] := (vib & 0x78) >> 3;
+    ae := vib & 7;
+    let do_step = false;
+    if vb2[x] == 0 {
+      do_step := true;
+    } else {
+      let nb5 = vb5[x] - 1;
+      vb5[x] := nb5;
+      if nb5 == 0 {
+        let nb2 = vb2[x] + 1;
+        vb2[x] := nb2;
+        if neg(nb2) {
+          do_step := true;
+        }
+      }
+    }
+    if do_step {
+      vb5[x] := vb5[x] + 1;
+      if va[x] < vb5[x] {
+        vb5[x] := va[x];
+        vb2[x] := vb2[x] - 1;
+        vb5[x] := vb5[x] - 1;
+      }
+    }
+    slide_target();
+  }
+
+  proc sustain() {
+    let ins = instr_id[x] << 3;
+    let vib = mod_tab[u16(ins)];
+    ab := mod_tab[u16(ins) + 1];
+    ac := mod_tab[u16(ins) + 2];
+    vibc := vib;
+    let acv = ac;
+    if (acv & 4) == 0 && (acv & 0x10) == 0 && vib != 0 {
+      vibrato(vib);
+    } elif vib == 0 {
+      filt_hi_op := 0x18;
+      filt_lo_op := 0x0C;
+    } else {
+      filt_lo_op := vib >> 4;
+      filt_hi_op := vib & 0x0F;
+    }
+    slide_step(wad);
+  }
+
+  step {
+    if clock.run {
+      let ad = voice_tab[x];
+      wad := ad;
+      zp_ff := x;
+      if ca == speed {
+        let sl = seq_lo_tab[x];
+        let sh = seq_hi_tab[x];
+        zp_fb := sl;
+        zp_fc := sh;
+        let c = dur_cnt[x] - 1;
+        dur_cnt[x] := c;
+        if !neg(c) {
+          if cnt[x] != 0 {
+            d0[x] := wf[x] & 0xFE;
+          }
+          sustain();
+        } else {
+          sequence_walk();
+        }
+      } else {
+        sustain();
+      }
+    }
+  }
+}
+
+schedule {
+  clock;
+  for i in L.voices {
+    voice[i];
+  }
+}
