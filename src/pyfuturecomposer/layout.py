@@ -84,6 +84,7 @@ DEFAULTS = {
     "play": constants.DEFAULT_PLAY_OFFSET,
     "work": constants.WORK_BASE,
     "tempo": constants.OFF_SPEED,
+    "volume": constants.OFF_VOLUME,
     "voice_base": constants.OFF_VOICE_BASE,
     "seq_lo": constants.OFF_SEQ_LO,
     "seq_hi": constants.OFF_SEQ_HI,
@@ -160,6 +161,10 @@ def _chain(image, load: int, play: int, found: Dict[str, Finding]) -> bool:
         found["play"] = Finding(entry - load, detected(entry))
         found["work"] = Finding(work, detected(entry))
         found["tempo"] = Finding(chain["tempo"] - load, detected(chain["to_tick"]))
+        found["volume"] = Finding(
+            chain["to_tick"] + constants.VOLUME_IMMEDIATE - load,
+            detected(chain["to_tick"]),
+        )
         return True
     for entry in entries:
         try:
@@ -170,6 +175,10 @@ def _chain(image, load: int, play: int, found: Dict[str, Finding]) -> bool:
         found["play"] = Finding(entry - load, detected(entry))
         found["work"] = Finding(work, detected(entry))
         found["tempo"] = Finding(chain["tempo"] - load, detected(entry))
+        tick = follow_jmp(image, entry)
+        found["volume"] = Finding(
+            tick + constants.VOLUME_IMMEDIATE - load, detected(tick)
+        )
         found["state"] = Finding(0, detected(entry))
         return True
     return False

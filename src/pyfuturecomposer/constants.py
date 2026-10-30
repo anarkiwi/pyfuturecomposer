@@ -35,6 +35,7 @@ OFF_WAVE_PROG_PTR = 0x685  # $1e85 wave-program pointer table
 OFF_MOD = 0x726  # $1f26 per-instrument modulation-control bytes
 OFF_SLIDE = 0x2DB  # $1adb self-modified slide-delay CMP immediate
 OFF_PW_CARRY = 0x3B7  # $1bb7 pulse-width-lo carry immediate
+OFF_VOLUME = 0x01F  # $181f self-modified master-volume immediate of LDA #$1f
 OFF_FILT_LO = 0x6CE  # $1ece filter cutoff-lo store
 OFF_FILT_HI = 0x6CF  # $1ecf filter cutoff-hi store
 OFF_WAVE_CTRL = 0x492  # $1c92 self-modified wave-program control-table operand
@@ -42,6 +43,9 @@ OFF_WAVE_PITCH = 0x49A  # $1c9a self-modified wave-program pitch-table operand
 
 # The reference build's per-voice work area ($0278..$02DA, cleared by SUB_1d65)
 # and its play-state byte; other builds keep the same layout at another base.
+# Byte offset of the master-volume immediate from the start of the tick.
+VOLUME_IMMEDIATE = 10
+
 WORK_BASE = 0x0278
 WORK_SIZE = 0x63
 WORK_COUNTDOWN = 0x02CA
