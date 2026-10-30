@@ -43,7 +43,7 @@ Issues = "https://github.com/anarkiwi/pyfuturecomposer/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-pyfuturecomposer = ["*.lark"]
+pyfuturecomposer = ["*.lark", "specs/*.play"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
