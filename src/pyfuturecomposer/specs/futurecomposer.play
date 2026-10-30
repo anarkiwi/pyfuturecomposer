@@ -137,12 +137,12 @@ machine clock {
 
 machine voice[x in 0..3] {
   proc lab_1d35() {
-    sid[wad + 4] := d0[x];
+    sid[u16(wad) + 4] := d0[x];
   }
 
   proc lab_1d25(ad: u8, noteidx: u8) {
     sid[ad] := freq_lo_tab[noteidx];
-    sid[ad + 1] := freq_hi_tab[noteidx];
+    sid[u16(ad) + 1] := freq_hi_tab[noteidx];
   }
 
   proc lab_19bb() {
@@ -183,7 +183,7 @@ machine voice[x in 0..3] {
     note[x] := noteidx;
     let lo = freq_lo_tab[noteidx];
     let hi = freq_hi_tab[noteidx];
-    sid[ad + 1] := hi;
+    sid[u16(ad) + 1] := hi;
     fhi[x] := hi;
     fhi0[x] := hi;
     sid[ad] := lo;
@@ -192,18 +192,18 @@ machine voice[x in 0..3] {
       let ins = instr_id[x] << 3;
       x8 := ins;
       stream record = L.instr + u16(ins) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:instrument";
-      sid[ad + 5] := instr_tab[u16(ins) + 2];
-      sid[ad + 6] := instr_tab[u16(ins) + 3];
+      sid[u16(ad) + 5] := instr_tab[u16(ins) + 2];
+      sid[u16(ad) + 6] := instr_tab[u16(ins) + 3];
       let aux_v = instr_tab[u16(ins) + 4];
       let pulse_ctrl = instr_tab[u16(ins)];
       let wave = instr_tab[u16(ins) + 1];
       wf[x] := wave;
       d0[x] := wave;
-      sid[ad + 2] := 0;
+      sid[u16(ad) + 2] := 0;
       pwlo[x] := 0;
       pctrl[x] := pulse_ctrl;
       let pw_hi = pulse_ctrl & 0x0F;
-      sid[ad + 3] := pw_hi;
+      sid[u16(ad) + 3] := pw_hi;
       pwhi[x] := pw_hi;
       dir[x] := 1;
       aux[x] := aux_v;
@@ -353,7 +353,7 @@ machine voice[x in 0..3] {
     if (d2aa & 0x10) != 0 {
       lab_1d25(ad, note[x] + pitch);
     } else {
-      sid[ad + 1] := pitch + 0x0D;
+      sid[u16(ad) + 1] := pitch + 0x0D;
       sid[ad] := 0;
     }
     lab_1d35();
@@ -364,14 +364,14 @@ machine voice[x in 0..3] {
     if (acv & 0x10) == 0 {
       if (acv & 0x80) != 0 {
         if cnt[x] < 2 {
-          sid[ad + 1] := 0x48;
+          sid[u16(ad) + 1] := 0x48;
           sid[ad] := 0;
           d0[x] := 0x81;
           lab_1d35();
           return;
         }
         sid[ad] := flo[x];
-        sid[ad + 1] := fhi[x];
+        sid[u16(ad) + 1] := fhi[x];
         d0[x] := wf[x] & 0xFE;
       }
       if (acv & 4) != 0 {
@@ -433,8 +433,8 @@ machine voice[x in 0..3] {
       pw_carry_imm := 0xB0;
     }
     let imm = pw_carry_imm;
-    sid[ad + 2] := pwlo[x] + imm;
-    sid[ad + 3] := pwhi[x] + u8(carry(pwlo[x], imm));
+    sid[u16(ad) + 2] := pwlo[x] + imm;
+    sid[u16(ad) + 3] := pwhi[x] + u8(carry(pwlo[x], imm));
     if (ac & 0x40) != 0 && cnt[x] >= 3 {
       d0[x] := wave_arp_tab[cnt[x] & 3];
     }
@@ -488,14 +488,14 @@ machine voice[x in 0..3] {
         sid[ad] := lo_v + bb;
         let n = fhi[x] + bc + u8(carry(lo_v, bb));
         fhi[x] := n;
-        sid[ad + 1] := n;
+        sid[u16(ad) + 1] := n;
       } else {
         let lo_v = flo[x];
         flo[x] := lo_v - bb;
         sid[ad] := lo_v - bb;
         let n = fhi[x] - bc - u8(borrow(lo_v, bb));
         fhi[x] := n;
-        sid[ad + 1] := n;
+        sid[u16(ad) + 1] := n;
       }
     }
     pw_sweep(ad);
@@ -552,7 +552,7 @@ machine voice[x in 0..3] {
         }
       }
       sid[wad] := d3;
-      sid[wad + 1] := d4;
+      sid[u16(wad) + 1] := d4;
     }
   }
 
