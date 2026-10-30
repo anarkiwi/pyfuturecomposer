@@ -59,7 +59,7 @@ def binding(song: Song, found=None) -> Dict[str, Union[int, tuple]]:
     """The spec's ``layout`` values for ``song``'s build (absolute addresses)."""
     resolved = (found or layout.variant(song)).resolve()
     values: Dict[str, Union[int, tuple]] = {
-        name: song.load + getattr(resolved, name) for name in TABLES
+        name: (song.load + getattr(resolved, name)) & 0xFFFF for name in TABLES
     }
     values["work"] = resolved.work
     values["voices"] = VOICE_ORDER
@@ -102,7 +102,7 @@ class FutureComposerPlayer(SpecPlayer):
             song.play,
             subtune,
             bind=lambda _view, _entry: values,
-            entries=lambda _view: {play_entry},
+            entries=lambda _view: {song.play, play_entry},
         )
 
     @property
