@@ -72,3 +72,18 @@ python scripts/fc_memdiff.py tune.sid --frames 500
 python scripts/fc_memdiff.py .hvsc-survey/tunes.csv --hvsc $HVSC --jobs 64
 ```
 
+
+## Translation validation
+
+`tests/test_tv.py` proves spec routines equal to the reference tune's 6502 code
+for all initial memory (`pysidtracker.playspec.tv.validate`):
+
+- `clock.reinit` against `$1d74` (default suite);
+- `clock.cold_init` against `$1d65` (marked `oracle`);
+- a spec with a wrong seed byte is refuted, and `tv.replay` reproduces the
+  counterexample on the CPU (marked `oracle`).
+
+The row/pattern reader at `$19d0` is not provable as a routine. Its end-of-pattern
+path falls into the voice loop, which returns only when the voice index in `$FF`
+is 0, and `validate` takes no precondition on memory. The spec still has it as
+`voice[x].read_pattern_byte`.
