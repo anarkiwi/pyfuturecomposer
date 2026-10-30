@@ -71,7 +71,7 @@ name at least one pattern.
 | --- | --- |
 | `$00`-`$3F` | play pattern `byte` |
 | `$40`-`$7F` | repeat the next pattern `byte & $3F` more times |
-| `$80`-`$FD` | transpose by `byte & $1F` (signed 8-bit add to the note index) |
+| `$80`-`$FD` | transpose: add `byte & $1F` (0-31) to every following note index |
 | `$FE` | end of song |
 | `$FF` | loop this voice |
 
@@ -127,7 +127,7 @@ both it and the grid carry only the low nibble of the pulse-width-high registers
 
 The transcription follows the play routine of the reference tune *We R Da
 Best (tune 2)* (Warren Pilbrough / Jade Tiger). `render_grid` reproduces the
-`sidtrace` `sidplayfp` register oracle for it byte-exact (see
+`sidtrace` `sidplayfp` register oracle for it byte-exact over the whole song (see
 [oracle testing](oracle-testing.md) and `tests/test_oracle_hvsc.py`). Builds
 whose play code matches this routine are placed by their variant. Builds with
 code paths the transcription does not have (for example V3.0/V3.1, #17) are not

@@ -2,6 +2,7 @@
 that docs/format.md's byte tables describe the grammar."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -209,3 +210,39 @@ def test_documented_pattern_bytes_match_the_grammar():
         want = next(v for k, v in names.items() if meaning.startswith(k))
         for byte in range(lo, hi + 1):
             assert _kind("pattern", byte).commands[0][0] == want, hex(byte)
+
+
+def _frames_until_finished(song, limit=400):
+    player = FutureComposerPlayer(song)
+    for frame in range(limit):
+        player.play_frame()
+        if player.finished:
+            return frame
+    raise AssertionError("song never ended")
+
+
+def test_repeat_step_plays_the_next_pattern_that_many_extra_times():
+    end = c.SEQ_END
+    once = _frames_until_finished(_build(0x00, _NOTE_PATTERN, seq=(0x00, end)))
+    twice = _frames_until_finished(_build(0x00, _NOTE_PATTERN, seq=(0x00, 0x00, end)))
+    repeated = _frames_until_finished(
+        _build(0x00, _NOTE_PATTERN, seq=(c.SEQ_REPEAT | 2, 0x00, end))
+    )
+    assert twice > once
+    assert repeated - once == 2 * (twice - once)
+
+
+def test_transpose_step_adds_its_low_five_bits_to_the_note_index():
+    def first_pitch(seq):
+        song = _build(0x00, _NOTE_PATTERN, seq=seq)
+        img = bytearray(song.image)
+        for note in range(0x40):
+            img[c.OFF_FREQ_LO + note] = note
+            img[c.OFF_FREQ_HI + note] = 0x80 | note
+        player = FutureComposerPlayer(replace(song, image=bytes(img)))
+        player.play_frame()
+        return player.regs[0]
+
+    assert first_pitch((0x00, c.SEQ_LOOP)) == 0x0C
+    assert first_pitch((c.SEQ_TRANSPOSE | 3, 0x00, c.SEQ_LOOP)) == 0x0F
+    assert first_pitch((c.SEQ_TRANSPOSE | 0x23, 0x00, c.SEQ_LOOP)) == 0x0F
