@@ -17,7 +17,10 @@ from pysidtracker import (
     SidImage,
     SitePattern,
     Variant,
+    SidError,
     find_code_first,
+    follow_jmp,
+    image_after_init,
 )
 from pysidtracker.facets import DETECTED, detected, inferred
 
@@ -40,6 +43,16 @@ PLAY_CHAIN = RoutineChain(
         (
             "to_tick",
             "EE ?? ?? EE ?? ?? EE ?? ?? A9 1F 8D 18 D4 A2 02 CE ?? ?? 10 ?? "
+            "AD {tempo:w} 8D ?? ??",
+        ),
+    )
+)
+
+TICK_CHAIN = RoutineChain(
+    (
+        (
+            "entry",
+            "EE ?? ?? EE ?? ?? EE ?? ?? A9 1F 8D 18 D4 A2 02 CE {ca:w} 10 ?? "
             "AD {tempo:w} 8D ?? ??",
         ),
     )
@@ -107,6 +120,7 @@ FACETS = FacetRegistry(
             default=constants.DEFAULT_INIT_OFFSET,
             detector=_found("init"),
         ),
+        Facet("state", "layout", default=1, detector=_found("state")),
         *(
             Facet(
                 name,
@@ -128,15 +142,45 @@ def _signature(image, load: int, found: Dict[str, Finding]) -> None:
         found["layout"] = Finding(layout, detected(hit.addr))
 
 
-def _chain(image, load: int, play: int, found: Dict[str, Finding]) -> None:
+def _chain(image, load: int, play: int, found: Dict[str, Finding]) -> bool:
+    """Record the play entry reached from ``play``, through any ``JMP`` trampolines
+    or at the standard offset; True when a play chain matched.  A build without
+    the state-byte test at its entry matches :data:`TICK_CHAIN` and has no state."""
+    entries = tuple(
+        dict.fromkeys(
+            (play, follow_jmp(image, play), load + constants.DEFAULT_PLAY_OFFSET)
+        )
+    )
+    for entry in entries:
+        try:
+            chain = PLAY_CHAIN.discover(image, entry)
+        except ChainError:
+            continue
+        work = chain["state"] - (constants.WORK_STATE - constants.WORK_BASE)
+        found["play"] = Finding(entry - load, detected(entry))
+        found["work"] = Finding(work, detected(entry))
+        found["tempo"] = Finding(chain["tempo"] - load, detected(chain["to_tick"]))
+        return True
+    for entry in entries:
+        try:
+            chain = TICK_CHAIN.discover(image, entry)
+        except ChainError:
+            continue
+        work = chain["ca"] - (constants.WORK_COUNTDOWN - constants.WORK_BASE)
+        found["play"] = Finding(entry - load, detected(entry))
+        found["work"] = Finding(work, detected(entry))
+        found["tempo"] = Finding(chain["tempo"] - load, detected(entry))
+        found["state"] = Finding(0, detected(entry))
+        return True
+    return False
+
+
+def _after_init(image):
+    """``image`` after its own init, or None when the init cannot run."""
     try:
-        chain = PLAY_CHAIN.discover(image, play)
-    except ChainError:
-        return
-    found["play"] = Finding(play - load, detected(play))
-    work = chain["state"] - (constants.WORK_STATE - constants.WORK_BASE)
-    found["work"] = Finding(work, detected(play))
-    found["tempo"] = Finding(chain["tempo"] - load, detected(chain["to_tick"]))
+        return image_after_init(image)
+    except SidError:
+        return None
 
 
 def _sites(image, load: int, found: Dict[str, Finding]) -> None:
@@ -166,8 +210,12 @@ def detect(image, init: Optional[int] = None, play: Optional[int] = None) -> Var
         init = (header and header.init_address) or load
     found: Dict[str, Finding] = {"init": Finding(init - load, inferred("header"))}
     _signature(image, load, found)
-    _chain(image, load, play, found)
-    _sites(image, load, found)
+    scanned = image
+    if not _chain(image, load, play, found):
+        booted = _after_init(image)
+        if booted is not None and _chain(booted, load, play, found):
+            scanned = booted
+    _sites(scanned, load, found)
     return FACETS.detect(found)
 
 

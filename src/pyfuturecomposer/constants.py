@@ -44,6 +44,7 @@ OFF_WAVE_PITCH = 0x49A  # $1c9a self-modified wave-program pitch-table operand
 # and its play-state byte; other builds keep the same layout at another base.
 WORK_BASE = 0x0278
 WORK_SIZE = 0x63
+WORK_COUNTDOWN = 0x02CA
 WORK_STATE = 0x02CB
 
 # Instrument record (8 bytes) field offsets.

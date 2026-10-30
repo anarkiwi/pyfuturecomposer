@@ -62,6 +62,7 @@ def binding(song: Song, found=None) -> Dict[str, Union[int, tuple]]:
         name: (song.load + getattr(resolved, name)) & 0xFFFF for name in TABLES
     }
     values["work"] = resolved.work
+    values["has_state"] = bool(resolved.state)
     values["voices"] = VOICE_ORDER
     return values
 

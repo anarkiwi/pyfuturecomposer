@@ -4,6 +4,7 @@ layout {
   work, freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, voice_base, tempo,
   pw_step, filter, wave_arp, arp_delay, wave_prog_ptr, mod, slide, pw_carry,
   filt_lo, filt_hi, wave_ctrl, wave_pitch: addr;
+  has_state: flag;
   voices: list;
 }
 
@@ -111,12 +112,14 @@ machine clock {
   }
 
   step {
-    if st == 2 {
-      return;
-    }
-    if st == 1 {
-      reinit();
-      return;
+    if L.has_state {
+      if st == 2 {
+        return;
+      }
+      if st == 1 {
+        reinit();
+        return;
+      }
     }
     for k in 0..3 {
       cnt[k] += 1;
