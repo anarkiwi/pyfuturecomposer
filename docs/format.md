@@ -119,6 +119,11 @@ base. The work area, the self-modified operands and the zero-page scratch
 bytes are cells in the spec, so after every call the full 64 KiB outside the
 stack page equals the tune's own 6502 run for the reference build.
 
+The spec opens a `stream` with a grammar for each sequence, pattern and
+instrument it walks. `FutureComposerPlayer(song, validate=True)` parses each
+against `streams.GRAMMAR` and raises `FutureComposerParseError` for bytes that
+are not one stream, such as a pattern with no `$FF` terminator.
+
 `pysidtracker playspec check src/pyfuturecomposer/specs/futurecomposer.play`
 type-checks the spec. A loop that runs past its bound, such as a sequence that
 never reaches a pattern, raises `FutureComposerParseError`.

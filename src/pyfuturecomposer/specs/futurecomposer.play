@@ -187,6 +187,7 @@ machine voice[x in 0..3] {
     if d7[x] == 0 {
       let ins = instr_id[x] << 3;
       x8 := ins;
+      stream record = L.instr + u16(ins) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:instrument";
       sid[ad + 5] := instr_tab[u16(ins) + 2];
       sid[ad + 6] := instr_tab[u16(ins) + 3];
       let aux_v = instr_tab[u16(ins) + 4];
@@ -298,6 +299,7 @@ machine voice[x in 0..3] {
     let pat_hi = pat_tab[y + 1];
     zp_fd := pat_lo;
     zp_fe := pat_hi;
+    stream notes = word(pat_lo, pat_hi) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:pattern";
     slide_mode[x] := 0;
     cnt[x] := 0;
     vb8[x] := 3;
@@ -615,6 +617,7 @@ machine voice[x in 0..3] {
           }
           sustain();
         } else {
+          stream orderlist = word(sl, sh) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:sequence";
           sequence_walk();
         }
       } else {
