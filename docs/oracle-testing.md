@@ -87,3 +87,35 @@ The row/pattern reader at `$19d0` is not provable as a routine. Its end-of-patte
 path falls into the voice loop, which returns only when the voice index in `$FF`
 is 0, and `validate` takes no precondition on memory. The spec still has it as
 `voice[x].read_pattern_byte`.
+
+## Tunes that still diverge
+
+Over the 150-tune corpus (`tests/fixtures/fc_corpus.txt`), 133 tunes match
+`pysidtracker.oracle.EmuPlayer`, the tune's own 6502 run, for their whole song
+(`pysidtracker.song_length`). The other 17 split in two.
+
+Another player version (issue #17): 12 tunes whose play code shares little with
+the reference routine, about 550 to 1600 instructions apart once addresses are
+normalised. The spec does not describe them, and their layouts are mostly
+undetected. They diverge at frame 0.
+
+- `Christmas_1989_tune_2`, `Saturn_part_3`, `Spijkerhoek_Theme`,
+  `Summernight_Surprise_tune_1`, `Farwell_Cult_part_2`, `Game_On_1989_11`,
+  `Amiga_Theme`, `Shove`, `Zanshin`, `Chrome_Met1`, `Reggae_Example`,
+  `Be_Original_part_8`.
+
+The reference routine with local edits of the player code: 5 tunes, within 150
+instructions of the reference, each differing at a site of its own. A layout
+facet per edit would not generalise, so they are left as they are.
+
+| Tune | First differing frame | Cause |
+| --- | --- | --- |
+| `Swiss_National_Hymn` | 1 | the hard-frequency low-byte write is `STA $D000,Y`, not `$D400,Y` |
+| `For_FBR` | 1 | code equal to the reference except the filter pointer, yet Y is 0 at one hard-frequency write |
+| `Your_Label` | 13 | `39` where the reference has `38` (SEC) at `$1B7D` |
+| `Jungle_Gardenia` | 281 | the default-filter block jumps to `$1ADC`, skipping the `LDX $ff` at `$1ACE` |
+| `Forever_Tonight` | 6576 | not traced |
+
+To find where a tune diverges, run `scripts/fc_memdiff.py` on it: it plays
+`FutureComposerPlayer` beside the tune's own code and names the first differing
+register and work byte.
