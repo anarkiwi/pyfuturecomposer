@@ -6,7 +6,7 @@ back to load / load + 6.  Tables are placed later by :mod:`pyfuturecomposer.layo
 
 from typing import Any, Tuple
 
-from pysidtracker import BaseSidParser, SidError, SidImage, read_bytes
+from pysidtracker import BaseSidParser, SidError, SidImage, read_bytes, reraise_as
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.errors import SidParseError
@@ -16,10 +16,8 @@ from pyfuturecomposer.model import Song
 
 def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     """Return (load, init, play, name, author, released, image)."""
-    try:
+    with reraise_as(SidParseError, SidError):
         image = SidImage.from_bytes(data)
-    except SidError as exc:
-        raise SidParseError(str(exc)) from exc
     load = image.load
     header = image.header
     if header is None:
