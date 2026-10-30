@@ -71,7 +71,7 @@ def binding(song: Song, found=None) -> Dict[str, Union[int, tuple]]:
 
 def _bound_loop(exc: SpecRuntimeError) -> str:
     """The name of the spec proc whose bounded loop ``exc`` reports."""
-    match = re.search(r"loop at line (\d+)", str(exc))
+    match = re.search(r"loop at line (?:[^:\s]+:)?(\d+)", str(exc))
     if match is None:
         return str(exc)
     lines = spec_source().splitlines()
