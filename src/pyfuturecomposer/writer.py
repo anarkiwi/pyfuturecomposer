@@ -17,10 +17,9 @@ own load address: it is a valid C64 program and round-trips through
 loads directly into the editor (:func:`is_editor_native`).
 """
 
-import struct
 from pathlib import Path
 
-from pysidtracker import write_psid
+from pysidtracker import load_prefix, write_psid
 
 from pyfuturecomposer import constants
 from pyfuturecomposer.model import Song
@@ -51,7 +50,7 @@ def to_prg(song: Song) -> bytes:
     The two-byte little-endian load address followed by the driver code and
     inline song tables exactly as they sit in C64 memory.
     """
-    return struct.pack("<H", song.load) + song.image
+    return load_prefix(song.load) + song.image
 
 
 def write_prg(song: Song, path) -> None:

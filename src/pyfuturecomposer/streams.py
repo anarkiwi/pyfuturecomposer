@@ -1,7 +1,7 @@
 """Future Composer song streams: sequences, patterns and instruments.
 
 :data:`GRAMMAR` is the ``futurecomposer.lark`` :class:`~pysidtracker.ByteGrammar`.
-:func:`read_streams` reads every stream a tune's player reaches through its
+:func:`streams` reads every stream a tune's player reaches through its
 pointer tables, raising :class:`~pyfuturecomposer.errors.FutureComposerParseError`
 for bytes that are not one stream.  Pattern ids come from the sequences and
 instrument ids from the patterns, as the player reaches them.
@@ -18,6 +18,7 @@ from pysidtracker import (
     SidImage,
     Variant,
     image_after_init,
+    require_ram,
 )
 
 from pyfuturecomposer import constants, layout
@@ -194,6 +195,18 @@ def streams(song: Song) -> Iterator[Tuple[str, Model, str]]:
     found: Variant = layout.detect(loaded)
     var = found.resolve()
     image = _after_init(loaded)
+    for table, size in (
+        ("seq_lo", VOICES),
+        ("seq_hi", VOICES),
+        ("pat_ptr", 2 * PATTERN_IDS),
+        ("instr", INSTRUMENT_SIZE * INSTRUMENT_IDS),
+    ):
+        require_ram(
+            song.load + getattr(var, table),
+            size,
+            f"{table} table",
+            FutureComposerParseError,
+        )
     seq_lo, seq_hi = song.load + var.seq_lo, song.load + var.seq_hi
     patterns = set()
     for voice in range(VOICES):
@@ -212,3 +225,8 @@ def streams(song: Song) -> Iterator[Tuple[str, Model, str]]:
         what = f"instrument {ident}"
         addr = song.load + var.instr + ident * INSTRUMENT_SIZE
         yield what, _model(image, addr, "instrument", what), "instrument"
+
+
+def canonical(song: Song) -> str:
+    """The streams of ``song`` as text, equal for two songs that play the same."""
+    return "\n".join(GRAMMAR.listing(streams(song)))

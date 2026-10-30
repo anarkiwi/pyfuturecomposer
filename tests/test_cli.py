@@ -10,7 +10,7 @@ from pysidtracker.formats import recognize_format
 
 from pyfuturecomposer import parse, read
 from pyfuturecomposer.formats import FORMAT
-from pyfuturecomposer.writer import write_prg
+from pyfuturecomposer.writer import to_prg, to_sid, write_prg
 
 
 def _cli(argv):
@@ -86,3 +86,40 @@ def test_export_notes_a_relocated_rip(capsys, tmp_path, tune_path, load, noted):
 def test_no_command_exits():
     with pytest.raises(SystemExit):
         _cli([])
+
+
+def _synthetic(tmp_path, name, pattern):
+    from tests.test_synthetic import _NOTE_PATTERN, _build  # pylint: disable=C0415
+
+    song = _build(0x00, pattern or _NOTE_PATTERN)
+    path = tmp_path / name
+    path.write_bytes(to_sid(song) if name.endswith(".sid") else to_prg(song))
+    return path
+
+
+def test_equiv_ignores_the_container(capsys, tmp_path):
+    sid = _synthetic(tmp_path, "a.sid", None)
+    prg = _synthetic(tmp_path, "a.prg", None)
+    assert _cli(["equiv", "--format", "futurecomposer", str(sid), str(prg)]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_equiv_reports_a_different_note(capsys, tmp_path):
+    same = _synthetic(tmp_path, "a.sid", None)
+    other = _synthetic(tmp_path, "b.sid", (0xC0, 0x0D, 0xFF))
+    argv = ["equiv", "--format", "futurecomposer", str(same), str(other)]
+    with pytest.raises(SystemExit) as exit_info:
+        _cli(argv)
+    assert exit_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "-    note NOTE=$0c" in out and "+    note NOTE=$0d" in out
+
+
+def test_snapshot_probes_follow_the_song(tmp_path):
+    probes = FORMAT.snapshot_probes()
+    a = parse(_synthetic(tmp_path, "a.sid", None).read_bytes())
+    b = parse(_synthetic(tmp_path, "b.sid", (0xC0, 0x0D, 0xFF)).read_bytes())
+    assert set(probes) == {"canonical", "prg", "sid", "variant"}
+    assert probes["canonical"](a) != probes["canonical"](b)
+    assert probes["prg"](a) != probes["prg"](b)
+    assert probes["variant"](a) == probes["variant"](b)
