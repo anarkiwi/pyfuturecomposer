@@ -19,7 +19,7 @@ from pyfuturecomposer import constants as c
 from pyfuturecomposer.formats import FORMAT
 from pyfuturecomposer.streams import GRAMMAR, Instrument, streams
 
-from .test_synthetic import _NOTE_PATTERN, _build
+from .test_synthetic import LOAD, _NOTE_PATTERN, _build
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "format.md"
 
@@ -278,3 +278,16 @@ def test_unterminated_pattern_is_rejected_unless_validation_is_off():
     FutureComposerPlayer(song, validate=False).play_frame()
     with pytest.raises(FutureComposerParseError, match="pattern"):
         FutureComposerPlayer(song).play_frame()
+
+
+def test_the_frame_ends_when_a_voice_ends_the_song():
+    song = _build(0x00, _NOTE_PATTERN)
+    img = bytearray(song.image)
+    end = 0x6F2 + 0x10
+    img[end] = c.SEQ_END
+    img[c.OFF_SEQ_LO + 2] = (LOAD + end) & 0xFF
+    img[c.OFF_SEQ_HI + 2] = (LOAD + end) >> 8
+    player = FutureComposerPlayer(replace(song, image=bytes(img)))
+    player.play_frame()
+    assert player.finished
+    assert not any(player.regs[:0x18])
