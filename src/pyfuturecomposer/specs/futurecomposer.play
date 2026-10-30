@@ -1,9 +1,10 @@
 spec futurecomposer;
 
 layout {
-  work, freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, voice_base, tempo,
+  work, freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, voice_base, tempo, volume,
   pw_step, filter, wave_arp, arp_delay, wave_prog_ptr, mod, slide, pw_carry,
   filt_lo, filt_hi, wave_ctrl, wave_pitch: addr;
+  has_state: flag;
   voices: list;
 }
 
@@ -81,6 +82,7 @@ cell wave_arp_tab: u8[4] @ L.wave_arp ro;
 cell arp_delay_tab: u8[256] @ L.arp_delay ro;
 cell wprog: u8[24] @ L.wave_prog_ptr ro;
 
+cell volume_imm: u8 @ L.volume operand;
 cell slide_imm: u8 @ L.slide operand;
 cell pw_carry_imm: u8 @ L.pw_carry operand;
 cell filt_lo_op: u8 @ L.filt_lo operand;
@@ -111,17 +113,19 @@ machine clock {
   }
 
   step {
-    if st == 2 {
-      return;
-    }
-    if st == 1 {
-      reinit();
-      return;
+    if L.has_state {
+      if st == 2 {
+        return;
+      }
+      if st == 1 {
+        reinit();
+        return;
+      }
     }
     for k in 0..3 {
       cnt[k] += 1;
     }
-    sid[0x18] := 0x1F;
+    sid[0x18] := volume_imm;
     let dec = ca - 1;
     if neg(dec) {
       dec := speed;

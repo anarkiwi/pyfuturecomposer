@@ -30,7 +30,13 @@ reference build's value.
   offset from where the reference build has that fragment.
 - `init`, `play`: the entry points as offsets from load. `play` is detected when
   `layout.PLAY_CHAIN` matches the play entry. This `RoutineChain` reads the
-  state-byte test and then the tick it branches to.
+  state-byte test and then the tick it branches to. The entry is tried at the
+  header's play address, where any `JMP` trampolines there lead, and at
+  `load + 6`; a build whose init patches the trampoline is detected on the
+  memory its own init leaves.
+- `state`: whether the entry tests the state byte (`$02CB` in the reference
+  build). A build that jumps straight to the tick has none, matches
+  `layout.TICK_CHAIN` and takes its work base from the countdown byte.
 - `work`: the absolute base of the per-voice work area (`$0278` in the
   reference build), from the state byte the play entry tests.
 - `tempo` (the speed byte), `voice_base`, `seq_lo`/`seq_hi`, `pat_ptr`, `freq_lo`/`freq_hi`,

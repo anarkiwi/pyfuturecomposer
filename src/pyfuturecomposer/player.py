@@ -11,6 +11,7 @@ from functools import lru_cache
 from importlib import resources
 from typing import Dict, Union
 
+from pysidtracker import SidParseError
 from pysidtracker.playspec import SpecPlayer, SpecRuntimeError, parse
 
 from pyfuturecomposer import constants, layout
@@ -28,6 +29,7 @@ TABLES = (
     "instr",
     "voice_base",
     "tempo",
+    "volume",
     "pw_step",
     "filter",
     "wave_arp",
@@ -62,6 +64,7 @@ def binding(song: Song, found=None) -> Dict[str, Union[int, tuple]]:
         name: (song.load + getattr(resolved, name)) & 0xFFFF for name in TABLES
     }
     values["work"] = resolved.work
+    values["has_state"] = bool(resolved.state)
     values["voices"] = VOICE_ORDER
     return values
 
@@ -102,17 +105,23 @@ class FutureComposerPlayer(SpecPlayer):
         resolved = self.variant.resolve()
         play_entry = song.load + resolved.play
         self._state = values["work"] + constants.WORK_STATE - constants.WORK_BASE
-        super().__init__(
-            spec(),
-            song.image,
-            song.load,
-            song.init,
-            song.play,
-            subtune,
-            bind=lambda _view, _entry: values,
-            entries=lambda _view: {song.play, play_entry},
-            validate=validate,
-        )
+        for entries in ({play_entry}, {song.play, play_entry}):
+            try:
+                super().__init__(
+                    spec(),
+                    song.image,
+                    song.load,
+                    song.init,
+                    song.play,
+                    subtune,
+                    bind=lambda _view, _entry: values,
+                    entries=lambda _view, found=frozenset(entries): found,
+                    validate=validate,
+                )
+                break
+            except SidParseError:
+                if song.play in entries:
+                    raise
 
     @property
     def finished(self) -> bool:
