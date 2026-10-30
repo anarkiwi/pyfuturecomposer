@@ -46,7 +46,7 @@ def _add_export_arguments(subparser) -> None:
 
 
 def _export(args, _fmt) -> None:
-    song = read(args.song)
+    song = read(args.song, validate=False)
     fmt = args.format or ("sid" if args.output.lower().endswith(".sid") else "prg")
     (writer.write_sid if fmt == "sid" else writer.write_prg)(song, args.output)
     print(f"wrote {args.output} ({fmt})")

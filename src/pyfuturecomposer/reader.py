@@ -37,12 +37,12 @@ def _parse_container(data: bytes) -> Tuple[int, int, int, str, str, str, bytes]:
     return (load, init, play, header.name, header.author, header.released, image.image)
 
 
-def parse(data: bytes, validate: bool = False) -> Song:
+def parse(data: bytes, validate: bool = True) -> Song:
     """Parse a PSID/RSID/.prg byte string into a :class:`Song`.
 
-    With ``validate``, every sequence, pattern and instrument the player reaches
-    must parse as its :mod:`~pyfuturecomposer.streams` grammar rule, else
-    :class:`~pyfuturecomposer.errors.SidParseError`.
+    With ``validate`` (the default), every sequence, pattern and instrument the
+    player reaches must parse as its :mod:`~pyfuturecomposer.streams` grammar
+    rule, else :class:`~pyfuturecomposer.errors.SidParseError`.
     """
     load, init, play, name, author, released, image = _parse_container(data)
     song = Song(
@@ -60,7 +60,7 @@ def parse(data: bytes, validate: bool = False) -> Song:
     return song
 
 
-def read(source, validate: bool = False) -> Song:
+def read(source, validate: bool = True) -> Song:
     """Read a Future Composer tune from a path, bytes or binary file object."""
     return parse(read_bytes(source), validate)
 
@@ -77,7 +77,7 @@ class FutureComposerSidParser(BaseSidParser):
 
     def parse(self, data: bytes, **kwargs: Any) -> Song:
         """Decode raw ``.sid``/``.prg`` ``data`` into a :class:`Song`."""
-        return parse(data, bool(kwargs.get("validate")))
+        return parse(data, bool(kwargs.get("validate", False)))
 
     def recognize(self, image):
         """Return the C64 address of the FC player signature, or ``None``.

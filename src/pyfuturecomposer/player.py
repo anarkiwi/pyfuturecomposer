@@ -98,7 +98,7 @@ class FutureComposerPlayer(SpecPlayer):
         subtune: int = 0,
         validate: bool = True,
     ):
-        song = source if isinstance(source, Song) else parse_song(bytes(source))
+        song = source if isinstance(source, Song) else parse_song(bytes(source), False)
         self.song = song
         self.variant = layout.variant(song)
         values = binding(song, self.variant)

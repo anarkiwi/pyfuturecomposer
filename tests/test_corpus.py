@@ -49,7 +49,7 @@ def corpus_tune(request, hvsc):
 def test_corpus_parses_and_detects_direct(corpus_tune):
     """Every real FC corpus tune parses and detects as DIRECT."""
     rel, data = corpus_tune
-    song = parse(data)
+    song = parse(data, validate=False)
     assert len(song.image) > 0, rel
     assert song.load > 0, rel
     detection = FutureComposerSidParser().detect(data)

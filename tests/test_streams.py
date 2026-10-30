@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from pyfuturecomposer import (
+    FutureComposerSidParser,
     FutureComposerParseError,
     FutureComposerPlayer,
     SidParseError,
@@ -129,12 +130,13 @@ def test_streams_round_trip_through_the_grammar():
     GRAMMAR.check(streams(song), FutureComposerParseError)
 
 
-def test_validate_rejects_a_malformed_stream_and_default_does_not():
+def test_read_rejects_a_malformed_stream_unless_validation_is_off():
     song = _build(0x00, _NOTE_PATTERN, seq=(c.SEQ_LOOP,))
     data = to_sid(song)
-    assert parse(data).image == song.image
     with pytest.raises(SidParseError):
-        parse(data, validate=True)
+        parse(data)
+    assert parse(data, validate=False).image == song.image
+    assert FutureComposerSidParser().parse(data).image == song.image
 
 
 def test_bare_prg_streams_are_read_from_the_loaded_image():
