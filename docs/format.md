@@ -168,7 +168,7 @@ corpus.
 - [Future Composer](https://en.wikipedia.org/wiki/Future_Composer) (MoN /
   Deenen).
 - `preframr-sidtrace` register oracle; `deplayroutine` generic interpreter.
-- [pyresidfp](https://pypi.org/project/pyresidfp/) — reSIDfp SID emulation
+- [pylibresidfp](https://pypi.org/project/pylibresidfp/) — libresidfp SID emulation
   (WAV render).
 - [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) — shared
   container/image/detection base.
