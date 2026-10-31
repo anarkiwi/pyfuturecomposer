@@ -4,7 +4,8 @@
 ``pysidtracker info|reglog|wav`` play Future Composer tunes through
 :class:`~pyfuturecomposer.reader.FutureComposerSidParser` and
 :class:`~pyfuturecomposer.player.FutureComposerPlayer`, and contributes the
-``export`` subcommand (an editor-loadable ``.prg`` or a PSID re-wrap).
+``export`` subcommand (an editor-loadable ``.prg`` or a PSID re-wrap); its ``spec``
+hook exports the playspec.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pysidtracker import FormatCommand, SidFormat
 
 from pyfuturecomposer import layout, writer
 from pyfuturecomposer.model import Song
-from pyfuturecomposer.player import FutureComposerPlayer
+from pyfuturecomposer.player import FutureComposerPlayer, spec_binding
 from pyfuturecomposer.reader import FutureComposerSidParser, read
 from pyfuturecomposer.streams import GRAMMAR, canonical, streams
 
@@ -69,6 +70,7 @@ FORMAT = SidFormat(
     grammar=GRAMMAR,
     streams=streams,
     canonical=canonical,
+    spec=spec_binding,
     probes={
         "prg": writer.to_prg,
         "sid": writer.to_sid,

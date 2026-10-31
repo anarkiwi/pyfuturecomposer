@@ -2,7 +2,11 @@
 
 from pysidtracker import PW_HI_REGS, grid_from_writes
 
+from pysidtracker.playspec import elaborate
+
 from pyfuturecomposer import FutureComposerPlayer, iter_register_writes, read
+from pyfuturecomposer.formats import FORMAT
+from pyfuturecomposer.player import spec
 
 NREG = 25
 
@@ -59,3 +63,13 @@ def test_reference_tune_boots_its_own_init(tune_path):
     player = FutureComposerPlayer(song)
     assert player.variant.source("play").kind == "detected"
     assert player.render_grid(64) == FutureComposerPlayer(song).render_grid(64)
+
+
+def test_format_exports_the_spec(tune_path):
+    song = read(tune_path)
+    bound = FORMAT.spec(song)
+    assert bound.spec is spec()
+    assert elaborate(bound.spec, bound.bind(None, None)).name == "futurecomposer"
+    assert FORMAT.spec_player(song).render_grid(64) == (
+        FutureComposerPlayer(song).render_grid(64)
+    )
