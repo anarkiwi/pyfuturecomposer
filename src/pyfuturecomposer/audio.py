@@ -1,10 +1,11 @@
 """Render Future Composer songs through an emulated SID to samples or WAV.
 
 Thin Future Composer wrappers over the shared :mod:`pysidtracker.audio` renderer.
-By default the emulated SID is `pyresidfp <https://pypi.org/project/pyresidfp/>`_
-(a core pysidtracker dependency).  Any object with ``write_register(reg, value)``,
-``clock(timedelta) -> samples`` and a ``sampling_frequency`` attribute can be
-passed as ``device`` instead (e.g. for tests or a different emulator).
+By default the emulated SID is `pylibresidfp <https://pypi.org/project/pylibresidfp/>`_
+(a core pysidtracker dependency).  Any object with ``run(writes, until) -> int16
+samples`` (``writes`` an ``(N, 3)`` array of absolute ``(cycle, reg, value)``) and a
+``sampling_hz`` attribute can be passed as ``device`` instead (e.g. for tests or a
+different emulator).
 """
 
 from pathlib import Path
@@ -43,8 +44,8 @@ def render_samples(
         raise FutureComposerError(str(exc)) from exc
     except AudioUnavailable as exc:
         raise FutureComposerError(
-            "pyresidfp is required to render audio; "
-            "install with: pip install pyresidfp"
+            "pylibresidfp is required to render audio; "
+            "install with: pip install pylibresidfp"
         ) from exc
     return render_player_samples(
         FutureComposerPlayer(song),

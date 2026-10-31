@@ -14,7 +14,7 @@ before playback.
 ## Install
 
 ```bash
-pip install pyfuturecomposer   # reader/player/reglog, WAV rendering via pyresidfp
+pip install pyfuturecomposer   # reader/player/reglog, WAV rendering via pylibresidfp
 ```
 
 ## Usage
