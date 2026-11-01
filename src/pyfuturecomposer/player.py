@@ -12,6 +12,7 @@ from importlib import resources
 from typing import Dict, Union
 
 from pysidtracker import SidParseError
+from pysidtracker.formats import SpecBinding
 from pysidtracker.playspec import SpecPlayer, SpecRuntimeError, parse
 
 from pyfuturecomposer import constants, layout
@@ -82,6 +83,13 @@ def _bound_loop(exc: SpecRuntimeError) -> str:
     return str(exc)
 
 
+def spec_binding(song: Song) -> SpecBinding:
+    """The :class:`~pysidtracker.formats.SpecBinding` :class:`FutureComposerPlayer`
+    plays ``song`` with: the packaged spec, the build's layout and the play entries
+    its first call reaches."""
+    return FutureComposerPlayer(song, validate=False).binding
+
+
 class FutureComposerPlayer(SpecPlayer):
     """The Future Composer play routine over a parsed :class:`Song`.
 
@@ -89,7 +97,8 @@ class FutureComposerPlayer(SpecPlayer):
     (:func:`pyfuturecomposer.layout.detect`).  With ``validate`` (the default) every sequence,
     pattern and instrument the routine opens must parse as its
     :data:`pyfuturecomposer.streams.GRAMMAR` rule, else the frame raises
-    :class:`~pyfuturecomposer.errors.FutureComposerParseError`.
+    :class:`~pyfuturecomposer.errors.FutureComposerParseError`.  :attr:`binding` is
+    the :class:`~pysidtracker.formats.SpecBinding` it plays.
     """
 
     def __init__(
@@ -106,6 +115,13 @@ class FutureComposerPlayer(SpecPlayer):
         play_entry = song.load + resolved.play
         self._state = values["work"] + constants.WORK_STATE - constants.WORK_BASE
         for entries in ({play_entry}, {song.play, play_entry}):
+            self.binding = SpecBinding(
+                spec(),
+                lambda _view, _entry: values,
+                song.image,
+                entries=lambda _view, found=frozenset(entries): found,
+                subtune=subtune,
+            )
             try:
                 super().__init__(
                     spec(),
@@ -114,8 +130,8 @@ class FutureComposerPlayer(SpecPlayer):
                     song.init,
                     song.play,
                     subtune,
-                    bind=lambda _view, _entry: values,
-                    entries=lambda _view, found=frozenset(entries): found,
+                    bind=self.binding.bind,
+                    entries=self.binding.entries,
                     validate=validate,
                 )
                 break
