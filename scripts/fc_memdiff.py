@@ -1,7 +1,7 @@
 """Run FutureComposerPlayer beside the tune's own 6502 code and report divergence.
 
 ``fc_memdiff.py tune.sid`` prints its first diverging frames; ``fc_memdiff.py
-tunes.csv --hvsc $HVSC`` groups a survey find CSV by first diverging work byte.
+tunes.csv --hvsc $HVSC`` groups a survey find CSV by first diverging play variable.
 """
 
 import argparse
@@ -13,37 +13,40 @@ from concurrent.futures import ProcessPoolExecutor
 from pysidtracker.oracle import EmuPlayer
 from tqdm import tqdm
 
-from pyfuturecomposer import FutureComposerPlayer, constants, read
+from pyfuturecomposer import FutureComposerPlayer, read
+from pyfuturecomposer.player import play_variables
 
 
 def diverge(song, frames: int, subtune: int = 0, limit: int = 4, progress=True):
-    """Yield ``(frame, regs, work)`` for the first ``limit`` diverging frames."""
+    """Yield ``(frame, regs, variables)`` for the first ``limit`` diverging frames: the
+    registers and the play variables (spec state, 6502 byte) that differ."""
     lib = FutureComposerPlayer(song, subtune)
     emu = EmuPlayer(song.image, song.load, song.init, song.play, subtune)
-    base = lib.variant["work"]
-    span = range(base, base + constants.WORK_SIZE)
+    work = lib.variant.resolve().work
     for frame in tqdm(range(frames), unit="frame", disable=not progress):
         lib.play_frame()
         emu.play_frame()
         regs = [r for r, (a, b) in enumerate(zip(lib.regs, emu.regs)) if a != b]
-        work = {
-            constants.WORK_BASE + a - base: (lib._rd(a), emu._rd(a))
-            for a in span
-            if lib._rd(a) != emu._rd(a)
+        variables = {
+            name: (lib.state(name), theirs)
+            for name, theirs in play_variables(work, emu._rd)
+            if lib.state(name) != theirs
         }
-        if regs or work:
-            yield frame, regs, work
+        if regs or variables:
+            yield frame, regs, variables
             limit -= 1
             if not limit:
                 return
 
 
 def first_divergence(job):
-    """``(path, (cause, frame))``: the first diverging work byte or register."""
+    """``(path, (cause, frame))``: the first diverging play variable or register."""
     path, frames = job
     try:
-        for frame, regs, work in diverge(read(path), frames, limit=1, progress=False):
-            cause = f"${min(work):04x}" if work else f"reg {regs[0]}"
+        for frame, regs, variables in diverge(
+            read(path), frames, limit=1, progress=False
+        ):
+            cause = min(variables) if variables else f"reg {regs[0]}"
             return path, (cause, frame)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return path, (type(exc).__name__, 0)
@@ -76,9 +79,9 @@ def main() -> None:
     if args.tune.endswith(".csv"):
         batch(args.tune, args.hvsc, args.frames, args.jobs)
         return
-    for frame, regs, work in diverge(read(args.tune), args.frames, args.subtune):
-        cells = " ".join(f"${a:04x}={x:02x}/{y:02x}" for a, (x, y) in work.items())
-        print(f"frame {frame}: regs {regs} work(lib/emu) {cells}")
+    for frame, regs, variables in diverge(read(args.tune), args.frames, args.subtune):
+        cells = " ".join(f"{n}={x:02x}/{y:02x}" for n, (x, y) in variables.items())
+        print(f"frame {frame}: regs {regs} variables(lib/emu) {cells}")
 
 
 if __name__ == "__main__":

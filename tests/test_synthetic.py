@@ -180,8 +180,7 @@ def _glide_onset(threshold):
     )
     player = FutureComposerPlayer(_build(0x00, pattern))
     grid = player.render_grid(40)
-    slide = LOAD + player.variant.resolve().slide
-    assert player._rd(slide) == threshold  # pylint: disable=protected-access
+    assert player.state("slide_delay") == threshold
     onset = next(i for i, row in enumerate(grid) if row[0])
     assert grid[onset][0] == 0x100 - 0x30
     return onset
@@ -205,19 +204,22 @@ def test_wave_program_reads_through_operand_words(ctrl):
     assert (0x05 + 0x0D, ctrl) in {(row[1], row[4]) for row in grid}
 
 
-def test_player_boots_the_tunes_own_init():
-    init = bytes.fromhex("A95A8DC90260")  # LDA #$5A; STA $02C9; RTS
-    image = init + bytes(0x7FA)
-    song = Song(image=image, load=0x1800, init=0x1800, play=0x1806)
-    assert (
-        FutureComposerPlayer(song)._rd(0x02C9) == 0x5A
-    )  # pylint: disable=protected-access
+def test_play_variables_start_from_what_the_tunes_own_init_left():
+    song = _build(0x00, _NOTE_PATTERN)
+    init = _INIT[:-1] + bytes.fromhex("A95A8DC902A9038DA70260")  # then $5A, 3, RTS
+    image = init + song.image[len(init) :]
+    player = FutureComposerPlayer(replace(song, image=image))
+    player.play_frame()
+    assert player.state("route") == 0x5A
+    assert player.state("voice[1].trans") == 3
+    assert player.state("voice[1].key") == 0x0C + 3
+    assert player.state("voice[0].key") == 0x0C
 
 
 def test_sid_registers_are_addressed_with_16_bit_arithmetic():
     song = _build(0x00, _NOTE_PATTERN)
     img = bytearray(song.image)
     img[c.OFF_VOICE_BASE] = 0xFC
-    player = FutureComposerPlayer(replace(song, image=bytes(img)), validate=False)
+    player = FutureComposerPlayer(replace(song, image=bytes(img)))
     player.play_frame()
     assert player._rd(0xD400 + 0xFC + 4) == 0x41  # pylint: disable=protected-access

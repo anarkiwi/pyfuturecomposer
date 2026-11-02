@@ -7,9 +7,9 @@ reference build's oracle) and optional WAV rendering through an emulated SID.
 
 Consumes `.sid` files (PSID/RSID containers) and bare `.prg` images through the
 shared [`pysidtracker`](https://github.com/anarkiwi/pysidtracker) base. A code
-signature recognises the player. Each build's tables, work area and play entry
-are read from the operands of its own play code, and the tune's own init is run
-before playback.
+signature recognises the player. Each build's tables and play entry are read from
+the operands of its own play code, and the tune's own init is run before playback; the
+play variables are the playspec's state, started from what the init left.
 
 ## Install
 

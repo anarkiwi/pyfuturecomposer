@@ -1,15 +1,16 @@
 """The Future Composer play routine, run as ``specs/futurecomposer.play``.
 
 :class:`FutureComposerPlayer` is a :class:`pysidtracker.playspec.SpecPlayer`: the
-tune's own init runs on the emulated 6502, then each play call runs the spec on
-the memory it left.  :mod:`pyfuturecomposer.layout` binds the spec's ``layout``
-block to the addresses of the tune's build.
+tune's own init runs on the emulated 6502, then each play call runs the spec.  The
+play variables are the spec's own state, started from the memory the init left;
+:mod:`pyfuturecomposer.layout` locates the tables and operands of the tune's build,
+which :func:`binding` hands the spec as its ``layout``.
 """
 
 import re
 from functools import lru_cache
 from importlib import resources
-from typing import Dict, Union
+from typing import Callable, Dict, Iterator, Optional, Tuple, Union
 
 from pysidtracker import SidParseError
 from pysidtracker.formats import SpecBinding
@@ -21,13 +22,14 @@ from pyfuturecomposer.model import Song
 from pyfuturecomposer.reader import parse as parse_song
 
 SPEC_RESOURCE = "specs/futurecomposer.play"
-TABLES = (
+ADDRESSES = (
     "freq_lo",
     "freq_hi",
     "seq_lo",
     "seq_hi",
     "pat_ptr",
     "instr",
+    "mod",
     "voice_base",
     "tempo",
     "volume",
@@ -35,16 +37,12 @@ TABLES = (
     "filter",
     "wave_arp",
     "arp_delay",
-    "wave_prog_ptr",
-    "mod",
-    "slide",
-    "pw_carry",
     "filt_lo",
     "filt_hi",
-    "wave_ctrl",
-    "wave_pitch",
+    "wave_prog_ptr",
+    "slide",
 )
-VOICE_ORDER = (2, 1, 0)
+VOICES = 3
 
 
 def spec_source() -> str:
@@ -58,20 +56,86 @@ def spec():
     return parse(spec_source())
 
 
-def binding(song: Song, found=None) -> Dict[str, Union[int, tuple]]:
-    """The spec's ``layout`` values for ``song``'s build (absolute addresses)."""
-    resolved = (found or layout.variant(song)).resolve()
-    values: Dict[str, Union[int, tuple]] = {
-        name: (song.load + getattr(resolved, name)) & 0xFFFF for name in TABLES
+def initial(view: bytes, work: int, slide: int) -> Dict[str, Union[int, list]]:
+    """``init_<variable>``: what the tune's init left in each play variable of the work
+    area at ``work`` (a list over the voices for a voice's own) and in the slide delay at
+    ``slide``; the spec keeps them as state from there."""
+
+    def byte(addr: int) -> int:
+        return view[addr & 0xFFFF]
+
+    voices = range(VOICES)
+    out: Dict[str, Union[int, list]] = {
+        f"init_{name}": [byte(work + offset + x) for x in voices]
+        for name, offset in constants.VOICE_BYTES.items()
     }
-    values["work"] = resolved.work
+    out.update(
+        {
+            f"init_{name}": [
+                byte(work + lo + x) | byte(work + hi + x) << 8 for x in voices
+            ]
+            for name, (lo, hi) in constants.VOICE_WORDS.items()
+        }
+    )
+    out.update(
+        {
+            f"init_{name}": byte(work + offset)
+            for name, offset in constants.SHARED_BYTES.items()
+        }
+    )
+    out.update(
+        {
+            f"init_{name}": byte(work + lo) | byte(work + hi) << 8
+            for name, (lo, hi) in constants.SHARED_WORDS.items()
+        }
+    )
+    out["init_slide_delay"] = byte(slide)
+    return out
+
+
+def play_variables(
+    work: int, memory: Callable[[int], int]
+) -> Iterator[Tuple[str, int]]:
+    """``(state name, value)`` of every play variable as the routine itself keeps it in the
+    work area at ``work`` (``memory`` reads a 6502 run's): what the spec's state holds.
+    """
+    for x in range(VOICES):
+        for name, offset in constants.VOICE_BYTES.items():
+            yield f"voice[{x}].{name}", memory(work + offset + x)
+        for name, (lo, hi) in constants.VOICE_WORDS.items():
+            yield f"voice[{x}].{name}", memory(work + lo + x) | memory(
+                work + hi + x
+            ) << 8
+    for name, offset in constants.SHARED_BYTES.items():
+        yield name, memory(work + offset)
+    for name, (lo, hi) in constants.SHARED_WORDS.items():
+        yield name, memory(work + lo) | memory(work + hi) << 8
+
+
+def binding(
+    song: Song, view: Optional[bytes] = None, found=None
+) -> Dict[str, Union[int, bool, list]]:
+    """The spec's ``layout`` values for ``song``'s build: the addresses of its tables and
+    the play variables ``view`` holds (default: the memory its init leaves)."""
+    resolved = (found or layout.variant(song)).resolve()
+    if view is None:
+        view = bytes(layout.initialised(song).mem)
+    values: Dict[str, Union[int, bool, list]] = {
+        name: (song.load + getattr(resolved, name)) & 0xFFFF for name in ADDRESSES
+    }
     values["has_state"] = bool(resolved.state)
-    values["voices"] = VOICE_ORDER
+    values.update(initial(view, resolved.work, values.pop("slide")))
     return values
 
 
+ENDLESS = {
+    "next_note": "sequence never reaches a pattern",
+    "read_pattern": "pattern never reaches a note",
+}
+
+
 def _bound_loop(exc: SpecRuntimeError) -> str:
-    """The name of the spec proc whose bounded loop ``exc`` reports."""
+    """What the spec's bounded loop that ``exc`` reports was looking for."""
     match = re.search(r"loop at line (?:[^:\s]+:)?(\d+)", str(exc))
     if match is None:
         return str(exc)
@@ -79,7 +143,7 @@ def _bound_loop(exc: SpecRuntimeError) -> str:
     for text in reversed(lines[: int(match.group(1))]):
         proc = re.match(r"\s*proc (\w+)", text)
         if proc:
-            return f"{proc.group(1)} never reaches a note"
+            return ENDLESS.get(proc.group(1), str(exc))
     return str(exc)
 
 
@@ -87,37 +151,28 @@ def spec_binding(song: Song) -> SpecBinding:
     """The :class:`~pysidtracker.formats.SpecBinding` :class:`FutureComposerPlayer`
     plays ``song`` with: the packaged spec, the build's layout and the play entries
     its first call reaches."""
-    return FutureComposerPlayer(song, validate=False).binding
+    return FutureComposerPlayer(song).binding
 
 
 class FutureComposerPlayer(SpecPlayer):
     """The Future Composer play routine over a parsed :class:`Song`.
 
-    Tables, work area and self-modified operands are placed by :attr:`variant`
-    (:func:`pyfuturecomposer.layout.detect`).  With ``validate`` (the default) every sequence,
-    pattern and instrument the routine opens must parse as its
-    :data:`pyfuturecomposer.streams.GRAMMAR` rule, else the frame raises
-    :class:`~pyfuturecomposer.errors.FutureComposerParseError`.  :attr:`binding` is
-    the :class:`~pysidtracker.formats.SpecBinding` it plays.
+    Tables and the addresses a build moves are placed by :attr:`variant`
+    (:func:`pyfuturecomposer.layout.detect`); the play variables start from what the
+    tune's own init left (:func:`binding`).  A sequence or pattern the routine cannot walk
+    to a note raises :class:`~pyfuturecomposer.errors.FutureComposerParseError`.
+    :attr:`binding` is the :class:`~pysidtracker.formats.SpecBinding` it plays.
     """
 
-    def __init__(
-        self,
-        source: Union[Song, bytes, bytearray],
-        subtune: int = 0,
-        validate: bool = True,
-    ):
+    def __init__(self, source: Union[Song, bytes, bytearray], subtune: int = 0):
         song = source if isinstance(source, Song) else parse_song(bytes(source), False)
         self.song = song
         self.variant = layout.variant(song)
-        values = binding(song, self.variant)
-        resolved = self.variant.resolve()
-        play_entry = song.load + resolved.play
-        self._state = values["work"] + constants.WORK_STATE - constants.WORK_BASE
+        play_entry = song.load + self.variant.resolve().play
         for entries in ({play_entry}, {song.play, play_entry}):
             self.binding = SpecBinding(
                 spec(),
-                lambda _view, _entry: values,
+                lambda view, _entry: binding(song, view, self.variant),
                 song.image,
                 entries=lambda _view, found=frozenset(entries): found,
                 subtune=subtune,
@@ -132,7 +187,6 @@ class FutureComposerPlayer(SpecPlayer):
                     subtune,
                     bind=self.binding.bind,
                     entries=self.binding.entries,
-                    validate=validate,
                 )
                 break
             except SidParseError:
@@ -142,15 +196,10 @@ class FutureComposerPlayer(SpecPlayer):
     @property
     def finished(self) -> bool:
         """True once the song has reached its end-of-song step."""
-        return self._rd(self._state) == 2
+        return self.state("play_state") == 2
 
     def _frame(self) -> None:
         try:
             super()._frame()
         except SpecRuntimeError as exc:
             raise FutureComposerParseError(_bound_loop(exc)) from exc
-        if self.validator is not None:
-            for (rule, base), message in self.validator.failures().items():
-                raise FutureComposerParseError(
-                    f"stream at ${base:04x} is not {rule.rsplit(':', 1)[1]}: {message}"
-                )

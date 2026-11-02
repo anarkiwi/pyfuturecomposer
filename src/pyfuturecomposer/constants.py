@@ -41,15 +41,43 @@ OFF_FILT_HI = 0x6CF  # $1ecf filter cutoff-hi store
 OFF_WAVE_CTRL = 0x492  # $1c92 self-modified wave-program control-table operand
 OFF_WAVE_PITCH = 0x49A  # $1c9a self-modified wave-program pitch-table operand
 
-# The reference build's per-voice work area ($0278..$02DA, cleared by SUB_1d65)
-# and its play-state byte; other builds keep the same layout at another base.
-# Byte offset of the master-volume immediate from the start of the tick.
-VOLUME_IMMEDIATE = 10
+# The reference build's work area ($0278..$02DA): the play routine's variables, at these offsets
+# from the work base; other builds keep the same layout at another base.  A per-voice variable
+# is one byte per voice from its offset, a word is its (low, high) offsets.
+VOICE_BYTES = {
+    "seqpos": 0x00,
+    "patpos": 0x03,
+    "left": 0x06,
+    "dur": 0x09,
+    "wave": 0x0C,
+    "key": 0x0F,
+    "instr": 0x12,
+    "slide": 0x1E,
+    "ticks": 0x21,
+    "pulse": 0x2A,
+    "trans": 0x2E,
+    "vib_dir": 0x3A,
+    "vib_pos": 0x3D,
+    "arp_pos": 0x40,
+    "cutoff": 0x48,
+    "pw_up": 0x4E,
+    "repeat": 0x55,
+    "ctrl": 0x58,
+}
+VOICE_WORDS = {"freq": (0x1B, 0x15), "pw": (0x24, 0x27)}
+SHARED_BYTES = {
+    "route": 0x51,
+    "countdown": 0x52,
+    "play_state": 0x53,
+    "filter_voice": 0x54,
+}
+SHARED_WORDS = {"slide_rate": (0x43, 0x44)}
 
 WORK_BASE = 0x0278
-WORK_SIZE = 0x63
-WORK_COUNTDOWN = 0x02CA
-WORK_STATE = 0x02CB
+WORK_COUNTDOWN = WORK_BASE + SHARED_BYTES["countdown"]
+WORK_STATE = WORK_BASE + SHARED_BYTES["play_state"]
+# Byte offset of the master-volume immediate from the start of the tick.
+VOLUME_IMMEDIATE = 10
 
 # Instrument record (8 bytes) field offsets.
 INSTR_WAVEFORM = 1

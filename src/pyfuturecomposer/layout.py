@@ -233,6 +233,12 @@ def song_image(song: Song) -> SidImage:
     return SidImage.from_bytes(writer.to_sid(song))
 
 
+def initialised(song: Song) -> SidImage:
+    """``song``'s image after its own init, as loaded for a bare ``.prg``."""
+    loaded = song_image(song)
+    return _after_init(loaded) or loaded
+
+
 def variant(song: Song) -> Variant:
     """The :func:`detect` variant of ``song``."""
     return detect(song_image(song))
