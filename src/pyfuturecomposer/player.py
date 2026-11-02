@@ -56,10 +56,13 @@ def spec():
     return parse(spec_source())
 
 
-def initial(view: bytes, work: int, slide: int) -> Dict[str, Union[int, list]]:
+def initial(
+    view: bytes, work: int, slide: int, scratch: int
+) -> Dict[str, Union[int, list]]:
     """``init_<variable>``: what the tune's init left in each play variable of the work
     area at ``work`` (a list over the voices for a voice's own) and in the slide delay at
-    ``slide``; the spec keeps them as state from there."""
+    ``slide`` and in the arpeggio's zero-page byte at ``scratch``; the spec keeps them as state
+    from there."""
 
     def byte(addr: int) -> int:
         return view[addr & 0xFFFF]
@@ -90,6 +93,7 @@ def initial(view: bytes, work: int, slide: int) -> Dict[str, Union[int, list]]:
         }
     )
     out["init_slide_delay"] = byte(slide)
+    out["init_arp_scratch"] = byte(scratch)
     return out
 
 
@@ -112,19 +116,57 @@ def play_variables(
         yield name, memory(work + lo) | memory(work + hi) << 8
 
 
+def refusal(song: Song, variant, entry: Optional[int] = None) -> Optional[str]:
+    """Why the spec cannot play ``song``, or None.  A build whose work area lies over its
+    speed or voice-base table was not placed; so was one whose play routine runs beside the
+    spec because the entry the spec stands in for is not where the routine starts."""
+    resolved = variant.resolve()
+    for name, size in (("tempo", 1), ("voice_base", VOICES)):
+        at = (song.load + getattr(resolved, name)) & 0xFFFF
+        if at < resolved.work + constants.WORK_SIZE and resolved.work < at + size:
+            return f"the work area at ${resolved.work:04x} overlaps the {name} table"
+    if (
+        entry is not None
+        and entry != song.play
+        and variant.source("play").kind != "detected"
+    ):
+        return f"the play routine at ${song.play:04x} does not start at the entry ${entry:04x}"
+    return None
+
+
+def _stray(song: Song, resolved) -> list:
+    """What each byte of the pulse program row a sweep byte without a program index reads
+    is: 1 the shift count, 2 + voice a voice's depth, 0 the memory at that address."""
+    kinds = {constants.SHARED_BYTES["ae"]: 1}
+    kinds.update({constants.VOICE_BYTES["depth"] + x: 2 + x for x in range(VOICES)})
+    base = song.load + resolved.pw_step + 0xFC
+    return [kinds.get((base + k - resolved.work) & 0xFFFF, 0) for k in range(4)]
+
+
 def binding(
-    song: Song, view: Optional[bytes] = None, found=None
+    song: Song, view: Optional[bytes] = None, found=None, entry: Optional[int] = None
 ) -> Dict[str, Union[int, bool, list]]:
     """The spec's ``layout`` values for ``song``'s build: the addresses of its tables and
-    the play variables ``view`` holds (default: the memory its init leaves)."""
-    resolved = (found or layout.variant(song)).resolve()
+    the play variables ``view`` holds (default: the memory its init leaves).
+
+    Raises:
+      FutureComposerParseError: the build is one the spec does not place (:func:`refusal`).
+    """
+    variant = found or layout.variant(song)
+    resolved = variant.resolve()
+    why = refusal(song, variant, entry)
+    if why:
+        raise FutureComposerParseError(why)
     if view is None:
         view = bytes(layout.initialised(song).mem)
     values: Dict[str, Union[int, bool, list]] = {
         name: (song.load + getattr(resolved, name)) & 0xFFFF for name in ADDRESSES
     }
     values["has_state"] = bool(resolved.state)
-    values.update(initial(view, resolved.work, values.pop("slide")))
+    for name in ("arp_zp", "order_zp", "pat_zp", "voice_zp"):
+        values[name] = getattr(resolved, name)
+    values["pw_wild"] = _stray(song, resolved)
+    values.update(initial(view, resolved.work, values.pop("slide"), resolved.arp_zp))
     return values
 
 
@@ -172,7 +214,7 @@ class FutureComposerPlayer(SpecPlayer):
         for entries in ({play_entry}, {song.play, play_entry}):
             self.binding = SpecBinding(
                 spec(),
-                lambda view, _entry: binding(song, view, self.variant),
+                lambda view, entry: binding(song, view, self.variant, entry),
                 song.image,
                 entries=lambda _view, found=frozenset(entries): found,
                 subtune=subtune,

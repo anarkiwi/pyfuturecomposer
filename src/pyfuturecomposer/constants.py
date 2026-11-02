@@ -63,9 +63,11 @@ VOICE_BYTES = {
     "pw_up": 0x4E,
     "repeat": 0x55,
     "ctrl": 0x58,
+    "depth": 0x37,
 }
 VOICE_WORDS = {"freq": (0x1B, 0x15), "pw": (0x24, 0x27)}
 SHARED_BYTES = {
+    "ae": 0x36,
     "route": 0x51,
     "countdown": 0x52,
     "play_state": 0x53,
@@ -73,6 +75,13 @@ SHARED_BYTES = {
 }
 SHARED_WORDS = {"slide_rate": (0x43, 0x44)}
 
+# The zero-page bytes of the reference build: the arpeggio step passes the table byte through
+# one, the voice's orderlist and pattern pointers and its index are the others.
+ARP_SCRATCH = 0x41
+ORDER_POINTER = 0xFB
+PATTERN_POINTER = 0xFD
+VOICE_INDEX = 0xFF
+WORK_SIZE = 0x63
 WORK_BASE = 0x0278
 WORK_COUNTDOWN = WORK_BASE + SHARED_BYTES["countdown"]
 WORK_STATE = WORK_BASE + SHARED_BYTES["play_state"]

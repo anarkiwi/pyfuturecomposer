@@ -4,7 +4,10 @@ import pytest
 
 from pyfuturecomposer import FutureComposerPlayer
 from pyfuturecomposer import constants as c
-from pyfuturecomposer.player import binding, initial, play_variables
+from types import SimpleNamespace
+
+from pyfuturecomposer import FutureComposerParseError
+from pyfuturecomposer.player import _stray, binding, initial, play_variables, refusal
 
 from .test_synthetic import _NOTE_PATTERN, _build
 
@@ -29,12 +32,14 @@ def test_initial_values_are_the_work_area_bytes_by_voice():
     view[work + c.SHARED_WORDS["slide_rate"][0]] = 0x30
     view[work + c.SHARED_WORDS["slide_rate"][1]] = 0x02
     view[0x1AF8] = 6
-    got = initial(bytes(view), work, 0x1AF8)
+    view[0x41] = 3
+    got = initial(bytes(view), work, 0x1AF8, 0x41)
     assert got["init_dur"] == [10, 11, 12]
     assert got["init_freq"] == [0x1234, 0x1235, 0x1236]
     assert got["init_route"] == 0xB0
     assert got["init_slide_rate"] == 0x0230
     assert got["init_slide_delay"] == 6
+    assert got["init_arp_scratch"] == 3
 
 
 def test_binding_places_the_tables_and_reads_the_init_values():
@@ -49,7 +54,12 @@ def test_binding_places_the_tables_and_reads_the_init_values():
 def test_every_play_variable_is_spec_state():
     player = _play(_build(0x00, _NOTE_PATTERN))
     names = [name for name, _ in play_variables(0, lambda _addr: 0)]
-    assert len(names) == len(set(names)) == 3 * 20 + 4 + 1
+    voice = len(c.VOICE_BYTES) + len(c.VOICE_WORDS)
+    assert (
+        len(names)
+        == len(set(names))
+        == 3 * voice + len(c.SHARED_BYTES) + len(c.SHARED_WORDS)
+    )
     assert all(isinstance(player.state(name), int) for name in names)
 
 
@@ -149,3 +159,39 @@ def test_state_two_silences_every_call():
     player.set_state("play_state", 2)
     assert not player.play_frame()
     assert player.finished
+
+
+def _variant(work, tempo, voice_base, found):
+    resolved = SimpleNamespace(work=work, tempo=tempo, voice_base=voice_base, pw_step=0)
+    return SimpleNamespace(
+        resolve=lambda: resolved,
+        source=lambda _name: SimpleNamespace(kind="detected" if found else "default"),
+    )
+
+
+@pytest.mark.parametrize("table", ["tempo", "voice_base"])
+def test_a_work_area_over_the_speed_or_voice_base_table_is_refused(table):
+    song = _build(0x00, _NOTE_PATTERN)
+    tables = {"tempo": 0x6E8, "voice_base": 0x6E9}
+    tables[table] = 0x27D - song.load
+    why = refusal(song, _variant(0x278, tables["tempo"], tables["voice_base"], True))
+    assert why == f"the work area at $0278 overlaps the {table} table"
+    assert refusal(song, _variant(0x278, 0x6E8, 0x6E9, True)) is None
+
+
+def test_a_play_routine_that_does_not_start_at_the_entry_is_refused():
+    song = _build(0x00, _NOTE_PATTERN)
+    assert refusal(song, _variant(0x278, 0x6E8, 0x6E9, False), song.play) is None
+    assert "does not start" in refusal(
+        song, _variant(0x278, 0x6E8, 0x6E9, False), song.play + 0x200
+    )
+    assert refusal(song, _variant(0x278, 0x6E8, 0x6E9, True), song.play + 0x200) is None
+    with pytest.raises(FutureComposerParseError, match="work area"):
+        binding(song, found=_variant(0x1800 + 0x6E8, 0x6E8, 0x6E9, True))
+
+
+def test_a_pulse_program_row_past_the_table_reads_the_variable_it_lies_over():
+    song = _build(0x00, _NOTE_PATTERN)
+    resolved = SimpleNamespace(work=song.load + 0x100 - 0x36, pw_step=0x100 - 0xFC)
+    assert _stray(song, resolved) == [1, 2, 3, 4]
+    assert _stray(song, SimpleNamespace(work=0x4000, pw_step=0x100)) == [0, 0, 0, 0]

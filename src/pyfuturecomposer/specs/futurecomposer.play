@@ -8,13 +8,14 @@ spec futurecomposer;
 
 layout {
   freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, mod, voice_base, tempo, volume, pw_step,
-  filter, wave_arp, arp_delay, filt_lo, filt_hi, wave_prog_ptr: addr;
+  filter, wave_arp, arp_delay, arp_zp, order_zp, pat_zp, voice_zp, filt_lo, filt_hi, wave_prog_ptr: addr;
   has_state: flag;
-  init_countdown, init_play_state, init_route, init_filter_voice, init_slide_rate, init_slide_delay:
+  pw_wild: list;
+  init_countdown, init_ae, init_arp_scratch, init_play_state, init_route, init_filter_voice, init_slide_rate, init_slide_delay:
   byte;
   init_seqpos, init_patpos, init_left, init_dur, init_wave, init_ctrl, init_key, init_instr,
   init_freq, init_slide, init_ticks, init_pw, init_pulse, init_trans, init_vib_dir, init_vib_pos,
-  init_arp_pos, init_cutoff, init_pw_up, init_repeat: list;
+  init_arp_pos, init_depth, init_cutoff, init_pw_up, init_repeat: list;
 }
 
 const FILTER_CUTOFF = 0x16;
@@ -61,6 +62,8 @@ table wave_pitch via wave_pitch_ptr stride 1 { b: u8; }
 // Shared state: the tempo counter, the song state ($02 ended, $01 restart), the filter's routing
 // and owning voice, and the slide command's rate and delay.
 state countdown: u8 = L.init_countdown;
+state ae: u8 = L.init_ae;
+state arp_scratch: u8 = L.init_arp_scratch;
 state play_state: u8 = L.init_play_state;
 state route: u8 = L.init_route;
 state filter_voice: u8 = L.init_filter_voice;
@@ -113,6 +116,7 @@ machine voice[x in 0..3] {
   state vib_dir: u8 = L.init_vib_dir[x];
   state vib_pos: u8 = L.init_vib_pos[x];
   state arp_pos: u8 = L.init_arp_pos[x];
+  state depth: u8 = L.init_depth[x];
   state cutoff: u8 = L.init_cutoff[x];
   state pw_up: u8 = L.init_pw_up[x];
   state repeat: u8 = L.init_repeat[x];
@@ -203,14 +207,18 @@ machine voice[x in 0..3] {
 
   // A pattern is read a command at a time up to a note. What follows a slide may be an
   // instrument, a duration or a note, and after an instrument a duration or a note; any other
-  // byte there is the note.
+  // byte there is the note. A pattern that lies over the arpeggio's zero-page byte (a null
+  // pointer) reads that variable there, as a note.
   proc read_pattern() {
     let after = 0;
     let walking = true;
     while walking bound 600 {
-      let first = pattern.c0;
-      let plain = after != 0 && first >= ite(after == 2, 0xC0, 0xE0);
-      let n = ite(first >= 0xF0 && !plain, pattern.c1, first);
+      let at = patptr[orderlist.c0] + patpos;
+      let lands = scratch(at);
+      let first = byte_at(at, pattern.c0);
+      let plain = lands || (after != 0 && first >= ite(after == 2, 0xC0, 0xE0));
+      let second = byte_at(at + 1, pattern.c1);
+      let n = ite(first >= 0xF0 && !plain, second, first);
       let noted = plain;
       if plain {
         patpos += 1;
@@ -223,12 +231,35 @@ machine voice[x in 0..3] {
       }
       after := ite(noted, 0, ite((first & 0xF0) == 0xE0, 1, ite((first & 0xE0) == 0xC0, 2, 0)));
       if (first & 0xF0) != 0xE0 || plain {
-        if pattern.ahead == 0xFF {
+        let ahead = byte_at(patptr[orderlist.c0] + patpos, pattern.ahead);
+        if ahead == 0xFF {
           fire pattern_end;
           walking := false;
         }
       }
     }
+  }
+
+  // The zero-page bytes the routine works through: a pattern that lies over them (a null pointer
+  // reads page zero) reads the variable there.
+  proc scratch(at: u16) -> bool {
+    return at == L.arp_zp || at == L.voice_zp || at - L.order_zp < 2 || at - L.pat_zp < 2;
+  }
+
+  proc byte_at(at: u16, memory: u8) -> u8 {
+    if at == L.arp_zp {
+      return arp_scratch;
+    }
+    if at == L.voice_zp {
+      return x;
+    }
+    if at - L.order_zp < 2 {
+      return ite(at == L.order_zp, lo(orderptr[x]), hi(orderptr[x]));
+    }
+    if at - L.pat_zp < 2 {
+      return ite(at == L.pat_zp, lo(patptr[orderlist.c0]), hi(patptr[orderlist.c0]));
+    }
+    return memory;
   }
 
   proc put_word(at: u8, value: u16) {
@@ -297,7 +328,8 @@ machine voice[x in 0..3] {
         if neg(arp_pos) {
           arp_pos := 2;
         }
-        let pitch = key + arp[arp_pos];
+        arp_scratch := arp[arp_pos];
+        let pitch = key + arp_scratch;
         put_word(FREQ, word(freq_lo[pitch], freq_hi[pitch]));
       }
     }
@@ -307,7 +339,7 @@ machine voice[x in 0..3] {
   // The vibrato sweeps the pitch a fraction of the way to the next note: a triangle of depth
   // $78 & vib, scaled down by the low three bits.
   proc vibrato(vib: u8) {
-    let depth = (vib & 0x78) >> 3;
+    depth := (vib & 0x78) >> 3;
     let stepping = false;
     if vib_dir == 0 {
       stepping := true;
@@ -334,17 +366,34 @@ machine voice[x in 0..3] {
     let borrow_lo = borrow(lo1, lo0);
     let gap = (hi1 - hi0 - u8(borrow_lo) + ticks + u8(!borrow(hi1, hi0, borrow_lo))) >> 1;
     let unit = word(lo1 - lo0, gap) >> (vib & 7);
+    ae := 0xFF;
     if ticks >= 4 {
       let swing = u16(ite(vib_pos > 0x80, 0, vib_pos)) - u16(depth >> 1);
       put_word(FREQ, word(lo0, hi0) + swing * unit);
     }
   }
 
+  // A pulse program row past the table's end lies over the play variables in some builds: the
+  // byte is then that variable (1 the vibrato shift, 2 + voice a voice's vibrato depth).
+  proc stray(kind: u8, memory: u8) -> u8 {
+    match kind {
+      1 => return ae;
+      2 => return voice[0].depth;
+      3 => return voice[1].depth;
+      4 => return voice[2].depth;
+      _ => return memory;
+    }
+  }
+
   proc pulse_width(sweep: u8) {
     if sweep != 0 {
       let p = ((sweep & 7) - 1) & 0x3F;
-      let step = ite(pw_program[p].until >= ticks, pw_program[p].step,
-                     ite(pw_program[p].then_until >= ticks, pw_program[p].then_step, sweep & 0xFC));
+      let wild = p == 0x3F;
+      let until = stray(ite(wild, L.pw_wild[0], 0), pw_program[p].until);
+      let first = stray(ite(wild, L.pw_wild[1], 0), pw_program[p].step);
+      let then_until = stray(ite(wild, L.pw_wild[2], 0), pw_program[p].then_until);
+      let then_step = stray(ite(wild, L.pw_wild[3], 0), pw_program[p].then_step);
+      let step = ite(until >= ticks, first, ite(then_until >= ticks, then_step, sweep & 0xFC));
       if pw_up == 0 {
         pw -= u16(step);
         if hi(pw) < 1 {

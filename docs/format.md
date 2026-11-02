@@ -153,6 +153,14 @@ the song has ended, `1` restarts the voices), and so on; `player.finished` is
 `play_state == 2`. `pyfuturecomposer.player.play_variables` names the work-area
 byte of each, for comparing a run against the tune's own 6502.
 
+The binder refuses a build it has not placed, with `FutureComposerParseError`: one whose
+work area lies over its speed or voice-base table, or whose play routine does not start at
+the entry the spec stands in for, so that the real player runs beside the spec
+(`tests/fixtures/fc_refused.txt` lists the HVSC tunes). The play variables that data can
+reach are read as the variable: a pulse program row past the table's end over the vibrato
+shift and depth (`pw_wild`), and a null pattern pointer over the arpeggio scratch byte and
+the voice's pointers and index in page zero (`arp_zp`, `order_zp`, `pat_zp`, `voice_zp`).
+
 A sequence that never reaches a pattern or a pattern that never reaches a note
 runs past the spec's bounded loop and raises `FutureComposerParseError`.
 `pysidtracker playspec check src/pyfuturecomposer/specs/futurecomposer.play`
