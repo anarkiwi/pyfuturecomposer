@@ -61,9 +61,9 @@ TICK_CHAIN = RoutineChain(
 SITES = tuple(
     CodePattern(spec)
     for spec in (
-        "86 ?? BD {voice_base:w} 8D ?? ?? A8 AD ?? ?? CD ?? ?? D0",
-        "BD {seq_lo:w} 85 ?? BD {seq_hi:w} 85 ?? DE ?? ?? 30",
-        "0A A8 B9 {pat_ptr:w} 85 ?? B9 ?? ?? 85 ?? A9 00 9D",
+        "86 {voice_zp} BD {voice_base:w} 8D ?? ?? A8 AD ?? ?? CD ?? ?? D0",
+        "BD {seq_lo:w} 85 {order_zp} BD {seq_hi:w} 85 ?? DE ?? ?? 30",
+        "0A A8 B9 {pat_ptr:w} 85 {pat_zp} B9 ?? ?? 85 ?? A9 00 9D",
         "A8 B9 {freq_lo:w} 48 B9 {freq_hi:w} AC ?? ?? 99 01 D4",
         "BD {instr:w} 48 BD ?? ?? A6 ?? 9D",
         "0A 0A 0A A8 B9 {mod:w} 8D ?? ?? B9 ?? ?? 8D",
@@ -74,7 +74,7 @@ SITES = tuple(
         "A9 {filter_lo} 85 ?? A9 {filter_hi} 85 ?? A6 ?? BD ?? ?? A0 0B",
         "29 0F AA BD {wave_prog_ptr:w} 8D {wave_ctrl:w} BD ?? ?? 8D ?? ?? "
         "BD ?? ?? 8D {wave_pitch:w}",
-        "AA BD {arp_delay:w} 85 ?? A6 ?? BD",
+        "AA BD {arp_delay:w} 85 {arp_zp} A6 ?? BD",
         "8D {filt_hi:w} 8E {filt_lo:w} 4C",
     )
 )
@@ -102,9 +102,17 @@ DEFAULTS = {
     "wave_ctrl": constants.OFF_WAVE_CTRL,
     "wave_pitch": constants.OFF_WAVE_PITCH,
     "arp_delay": constants.OFF_ARP_DELAY,
+    "arp_zp": constants.ARP_SCRATCH,
+    "order_zp": constants.ORDER_POINTER,
+    "pat_zp": constants.PATTERN_POINTER,
+    "voice_zp": constants.VOICE_INDEX,
     "filt_hi": constants.OFF_FILT_HI,
     "filt_lo": constants.OFF_FILT_LO,
 }
+
+
+# Facets that are addresses, not offsets from the load address.
+ABSOLUTE = ("arp_zp", "order_zp", "pat_zp", "voice_zp")
 
 
 def _found(name: str):
@@ -201,7 +209,7 @@ def _sites(image, load: int, found: Dict[str, Finding]) -> None:
         if "filter_lo" in caps:
             caps = {"filter": caps["filter_lo"] | caps["filter_hi"] << 8}
         for name, value in caps.items():
-            offset = (value - load) & 0xFFFF
+            offset = value if name in ABSOLUTE else (value - load) & 0xFFFF
             found.setdefault(name, Finding(offset, detected(hit.addr)))
 
 
@@ -231,6 +239,12 @@ def detect(image, init: Optional[int] = None, play: Optional[int] = None) -> Var
 def song_image(song: Song) -> SidImage:
     """``song`` loaded as a :class:`~pysidtracker.SidImage` with its entry points."""
     return SidImage.from_bytes(writer.to_sid(song))
+
+
+def initialised(song: Song) -> SidImage:
+    """``song``'s image after its own init, as loaded for a bare ``.prg``."""
+    loaded = song_image(song)
+    return _after_init(loaded) or loaded
 
 
 def variant(song: Song) -> Variant:

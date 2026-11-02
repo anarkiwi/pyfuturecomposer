@@ -1,9 +1,16 @@
 """Builds whose play entry is not at the header's play address play like their 6502."""
 
+from pathlib import Path
+
 import pytest
 from pysidtracker import EmuPlayer
 
-from pyfuturecomposer import FutureComposerPlayer, layout, parse
+from pyfuturecomposer import (
+    FutureComposerParseError,
+    FutureComposerPlayer,
+    layout,
+    parse,
+)
 
 FRAMES = 400
 
@@ -38,3 +45,19 @@ def test_registers_equal_the_tune_6502_run(build):
 def test_a_build_without_a_state_byte_has_no_state(hvsc):
     song = parse(hvsc.read(BUILDS["no_state_byte"]))
     assert not layout.variant(song).resolve().state
+
+
+REFUSED = [
+    line
+    for line in (Path(__file__).parent / "fixtures" / "fc_refused.txt")
+    .read_text()
+    .splitlines()
+    if line and not line.startswith("#")
+]
+
+
+@pytest.mark.parametrize("path", REFUSED)
+def test_a_build_the_spec_does_not_place_is_refused(hvsc, path):
+    player = FutureComposerPlayer(parse(hvsc.read(path), validate=False))
+    with pytest.raises(FutureComposerParseError, match="work area|does not start"):
+        player.render_grid(3000)

@@ -63,30 +63,31 @@ PYTHONPATH=scripts python -m pysidtracker.survey diff $HVSC .hvsc-survey/tunes.c
 
 `scripts/fc_memdiff.py` runs `FutureComposerPlayer` frame by frame beside
 `pysidtracker.oracle.EmuPlayer`, which executes the tune's own 6502 code. It
-compares the SID registers and the work area, and names each work byte by its
-reference-build address. It needs no Docker. Given a survey `find` CSV, it
-groups every tune by the first byte that diverges:
+compares the SID registers and every play variable (the spec's state against the
+byte the 6502 keeps in its work area, `pyfuturecomposer.player.play_variables`).
+It needs no Docker. Given a survey `find` CSV, it groups every tune by the first
+variable or register that diverges:
 
 ```bash
 python scripts/fc_memdiff.py tune.sid --frames 500
 python scripts/fc_memdiff.py .hvsc-survey/tunes.csv --hvsc $HVSC --jobs 64
 ```
 
+`tests/test_emu_equivalence.py` makes the same comparison for the reference tune.
 
-## Translation validation
+## Spec gate
 
-`tests/test_tv.py` proves spec routines equal to the reference tune's 6502 code
-for all initial memory (`pysidtracker.playspec.tv.validate`):
+A rewrite of `specs/futurecomposer.play` is gated against the spec it replaces with
+pysidtracker's `tools/spec_trace.py`, which compares what is audible (the registers
+with the bits the chip ignores masked, the gate and test edges of each voice) per play
+call over a tune list:
 
-- `clock.reinit` against `$1d74` (default suite);
-- `clock.cold_init` against `$1d65` (marked `oracle`);
-- a spec with a wrong seed byte is refuted, and `tv.replay` reproduces the
-  counterexample on the CPU (marked `oracle`).
-
-- `voice[x].tv_note_row` against `$193a..$1d35` for each voice (default suite): the
-  note-row loader, the pattern position step and the end-of-pattern test, proved as
-  a stretch with `validate(..., stop=0x1d35)`. The routine reloads the voice index
-  from `$FF`, so the proof assumes `$FF` holds the voice.
+```bash
+python scripts/fc_tunes.py $HVSC tunes.csv           # every HVSC tune the format accepts, with its build flags
+python $PYSIDTRACKER/tools/spec_trace.py record ref.pkl.gz old.play tunes.csv
+scripts/fc_gate.sh $PYSIDTRACKER ref.pkl.gz new.play tunes.csv   # check in parallel chunks
+python scripts/fc_trace_diff.py ref.pkl.gz tune.sid --spec new.play   # the first call that differs
+```
 
 ## Tunes that still diverge
 

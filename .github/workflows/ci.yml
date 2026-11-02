@@ -27,8 +27,8 @@ jobs:
         run: pylint src/pyfuturecomposer tests scripts
       - uses: anarkiwi/pysidtracker/.github/actions/cache@v0.47.0
         with:
-          key: ${{ hashFiles('tests/fixtures/fc_corpus.txt', 'tests/*.py') }}
-          tunes: tests tests/fixtures/fc_corpus.txt
+          key: ${{ hashFiles('tests/fixtures/fc_corpus.txt', 'tests/fixtures/fc_refused.txt', 'tests/*.py') }}
+          tunes: tests tests/fixtures/fc_corpus.txt tests/fixtures/fc_refused.txt
       - name: pytest + coverage (> 85%)
         # Excludes the byte-exact ``oracle`` tests (dedicated job below); those
         # need Docker.

@@ -126,27 +126,49 @@ operands, so this exporter does not re-relocate them to `$1800`.
 
 `FutureComposerPlayer` is a `pysidtracker.playspec.SpecPlayer`. It runs the
 tune's own init on the emulated 6502, then each play call runs
-`src/pyfuturecomposer/specs/futurecomposer.play` on the memory the init left.
-The spec states Future Composer's `entry_1806` play routine: the tempo divider
-(machine `clock`), and per voice (machine `voice[x]`) the DEC-duration row
-advance, the opcode-stream sequence and pattern walks, and the per-frame
-modulation engine. That engine covers slide-target vibrato and portamento, the
-`$E0` glide, a 16-bit pulse-width sweep, the filter-cutoff program and the
-wave / arp tables. `layout.detect` supplies the spec's `layout` block
-(`player.binding`): each table and self-modified operand address, and the work
-base. The work area, the self-modified operands and the zero-page scratch
-bytes are cells in the spec, so after every call the full 64 KiB outside the
-stack page equals the tune's own 6502 run for the reference build.
+`src/pyfuturecomposer/specs/futurecomposer.play`. The spec states the format, not
+the 6502 routine:
 
-The spec opens a `stream` with a grammar for each sequence, pattern and
-instrument it walks. `FutureComposerPlayer` parses each against
-`streams.GRAMMAR` (`validate=True`, the default) and raises
-`FutureComposerParseError` for bytes that are not one stream, such as a pattern
-with no `$FF` terminator. `validate=False` plays them anyway.
+- the tempo is a counter (`countdown`) that wraps to the speed byte and fires the
+  `row` event;
+- on a row each voice counts its note's duration down (`left`); out of rows it
+  fires `note`, which reads the next note: the orderlist is a cursor over the
+  voice's sequence (transposes and repeats are decoded as they are passed, a
+  pattern byte, `$FE` and `$FF` stop it) and the pattern a second cursor whose
+  commands set the slide, instrument and duration until a note starts the sound;
+  the end of a pattern fires `pattern_end`, which counts the repeat down and
+  moves the orderlist on;
+- every other call the voice plays its instrument's modulation (`modulate`):
+  vibrato or the arpeggio steps, slide, pulse-width sweep and jitter, the filter
+  program, and the waveform and pitch programs.
 
+Every play variable (the tempo counter, positions, durations, slide, pulse width,
+vibrato phase, filter owner, song state) is spec `state`, no address, started from the
+byte the tune's init left in the player's work area.
+`pyfuturecomposer.player.binding(song)` is the spec's `layout`: the addresses of the
+build's tables (`layout.detect`) and the `init_<variable>` values read from the memory
+after the init. A play variable is read and set with `SpecPlayer.state(name)` /
+`set_state(name, value)`: `voice[x].seqpos`, `voice[x].left`, `play_state` (`2` once
+the song has ended, `1` restarts the voices), and so on; `player.finished` is
+`play_state == 2`. `pyfuturecomposer.player.play_variables` names the work-area
+byte of each, for comparing a run against the tune's own 6502.
+
+The binder refuses a build it has not placed, with `FutureComposerParseError`: one whose
+work area lies over its speed or voice-base table, or whose play routine does not start at
+the entry the spec stands in for, so that the real player runs beside the spec
+(`tests/fixtures/fc_refused.txt` lists the HVSC tunes). The play variables that data can
+reach are read as the variable: a pulse program row past the table's end over the vibrato
+shift and depth (`pw_wild`), and a null pattern pointer over the arpeggio scratch byte and
+the voice's pointers and index in page zero (`arp_zp`, `order_zp`, `pat_zp`, `voice_zp`).
+
+A sequence that never reaches a pattern or a pattern that never reaches a note
+runs past the spec's bounded loop and raises `FutureComposerParseError`.
 `pysidtracker playspec check src/pyfuturecomposer/specs/futurecomposer.play`
-type-checks the spec. A loop that runs past its bound, such as a sequence that
-never reaches a pattern, raises `FutureComposerParseError`.
+type-checks the spec.
+
+What a pattern byte means depends on what precedes it. After a slide command an
+instrument, a duration or a note may follow; after an instrument a duration or a
+note. Any other byte there is the note, so `$C1 $C2` plays note `$C2`.
 
 `iter_register_writes(song, max_frames=..) -> (clock, reg, val)` is the shared
 `py*` register-log surface (via `pysidtracker.reglog.register_writes_from_player`,

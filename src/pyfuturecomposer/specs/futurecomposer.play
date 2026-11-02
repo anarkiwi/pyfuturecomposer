@@ -1,655 +1,478 @@
+// Future Composer's play call. The tempo counts down once per call; on a row each voice counts
+// its note's duration down and, out of rows, reads the next note: the orderlist names a pattern
+// ($FE ends the song, $FF restarts the voice, $80.. transpose, $40.. repeat), the pattern's
+// commands set slide, instrument and duration until a note starts the sound. Every other call
+// the voice plays its instrument's modulation: vibrato or arpeggio, slide, pulse sweep, filter
+// program, and the waveform and pitch programs.
 spec futurecomposer;
 
 layout {
-  work, freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, voice_base, tempo, volume,
-  pw_step, filter, wave_arp, arp_delay, wave_prog_ptr, mod, slide, pw_carry,
-  filt_lo, filt_hi, wave_ctrl, wave_pitch: addr;
+  freq_lo, freq_hi, seq_lo, seq_hi, pat_ptr, instr, mod, voice_base, tempo, volume, pw_step,
+  filter, wave_arp, arp_delay, arp_zp, order_zp, pat_zp, voice_zp, filt_lo, filt_hi, wave_prog_ptr: addr;
   has_state: flag;
-  voices: list;
+  pw_wild: list;
+  init_countdown, init_ae, init_arp_scratch, init_play_state, init_route, init_filter_voice, init_slide_rate, init_slide_delay:
+  byte;
+  init_seqpos, init_patpos, init_left, init_dur, init_wave, init_ctrl, init_key, init_instr,
+  init_freq, init_slide, init_ticks, init_pw, init_pulse, init_trans, init_vib_dir, init_vib_pos,
+  init_arp_pos, init_depth, init_cutoff, init_pw_up, init_repeat: list;
 }
+
+const FILTER_CUTOFF = 0x16;
+const FILTER_ROUTE = 0x17;
+const VOLUME = 0x18;
+const FREQ = 0;
+const PW = 2;
+const CTRL = 4;
+const AD = 5;
+const SR = 6;
+
+event pattern_end: note;
+event next_entry: pattern_end;
+event order_byte: note;
+event pattern_byte: note;
 
 cell sid: u8[0x19] @ 0xD400 out;
 
-cell zp_f8: u8 @ 0xF8 scratch;
-cell zp_f9: u8 @ 0xF9 scratch;
-cell zp_fa: u8 @ 0xFA scratch;
-cell zp_fb: u8 @ 0xFB scratch;
-cell zp_fc: u8 @ 0xFC scratch;
-cell zp_fd: u8 @ 0xFD scratch;
-cell zp_fe: u8 @ 0xFE scratch;
-cell zp_ff: u8 @ 0xFF scratch;
-cell zp_41: u8 @ 0x41 scratch;
-
-cell work_area: u8[0x63] @ L.work;
-cell seq_pos: u8[3] @ L.work + 0x00;
-cell pat_pos: u8[3] @ L.work + 0x03;
-cell dur_cnt: u8[3] @ L.work + 0x06;
-cell dur: u8[3] @ L.work + 0x09;
-cell wf: u8[3] @ L.work + 0x0C;
-cell note: u8[3] @ L.work + 0x0F;
-cell instr_id: u8[3] @ L.work + 0x12;
-cell fhi: u8[3] @ L.work + 0x15;
-cell fhi0: u8[3] @ L.work + 0x18;
-cell flo: u8[3] @ L.work + 0x1B;
-cell slide_mode: u8[3] @ L.work + 0x1E;
-cell cnt: u8[3] @ L.work + 0x21;
-cell pwlo: u8[3] @ L.work + 0x24;
-cell pwhi: u8[3] @ L.work + 0x27;
-cell pctrl: u8[3] @ L.work + 0x2A;
-cell a5: u8 @ L.work + 0x2D;
-cell trans: u8[3] @ L.work + 0x2E;
-cell x8: u8 @ L.work + 0x31;
-cell vibc: u8 @ L.work + 0x32;
-cell ab: u8 @ L.work + 0x33;
-cell ac: u8 @ L.work + 0x34;
-cell wad: u8 @ L.work + 0x35;
-cell ae: u8 @ L.work + 0x36;
-cell va: u8[3] @ L.work + 0x37;
-cell vb2: u8[3] @ L.work + 0x3A;
-cell vb5: u8[3] @ L.work + 0x3D;
-cell vb8: u8[3] @ L.work + 0x40;
-cell bb: u8 @ L.work + 0x43;
-cell bc: u8 @ L.work + 0x44;
-cell be: u8 @ L.work + 0x46;
-cell bf: u8 @ L.work + 0x47;
-cell fc0: u8[3] @ L.work + 0x48;
-cell aux: u8[3] @ L.work + 0x4B;
-cell dir: u8[3] @ L.work + 0x4E;
-cell c9: u8 @ L.work + 0x51;
-cell ca: u8 @ L.work + 0x52;
-cell st: u8 @ L.work + 0x53;
-cell cc: u8 @ L.work + 0x54;
-cell rcnt: u8[3] @ L.work + 0x55;
-cell d0: u8[3] @ L.work + 0x58;
-cell d3: u8 @ L.work + 0x5B;
-cell d4: u8 @ L.work + 0x5C;
-cell d5: u8 @ L.work + 0x5D;
-cell d6: u8 @ L.work + 0x5E;
-cell d7: u8[3] @ L.work + 0x5F;
-
-cell freq_lo_tab: u8[256] @ L.freq_lo ro;
-cell freq_hi_tab: u8[256] @ L.freq_hi ro;
-cell seq_lo_tab: u8[3] @ L.seq_lo ro;
-cell seq_hi_tab: u8[3] @ L.seq_hi ro;
-cell pat_tab: u8[256] @ L.pat_ptr ro;
-cell instr_tab: u8[264] @ L.instr ro;
-cell mod_tab: u8[264] @ L.mod ro;
-cell voice_tab: u8[3] @ L.voice_base ro;
+// Song data: the orderlists, the patterns' pointers and the instruments with their modulation.
+cell orderptr: u16[3] @ (L.seq_lo, L.seq_hi) ro;
+cell patptr: u16[64] @ L.pat_ptr ro;
+table instrument @ L.instr stride 8 { pulse: u8; wave: u8; ad: u8; sr: u8; }
+table modulation @ L.mod stride 8 { vib: u8; sweep: u8; flags: u8; }
+cell voice_base: u8[3] @ L.voice_base ro;
 cell speed: u8 @ L.tempo ro;
-cell pw_step_tab: u8[32] @ L.pw_step ro;
-cell filt: u8[12] @ L.filter ro;
-cell wave_arp_tab: u8[4] @ L.wave_arp ro;
-cell arp_delay_tab: u8[256] @ L.arp_delay ro;
-cell wprog: u8[24] @ L.wave_prog_ptr ro;
+cell volume: u8 @ L.volume;
 
-cell volume_imm: u8 @ L.volume operand;
-cell slide_imm: u8 @ L.slide operand;
-cell pw_carry_imm: u8 @ L.pw_carry operand;
-cell filt_lo_op: u8 @ L.filt_lo operand;
-cell filt_hi_op: u8 @ L.filt_hi operand;
-cell wave_ctrl_op: u16 @ L.wave_ctrl operand;
-cell wave_pitch_op: u16 @ L.wave_pitch operand;
+// The player's tables: note frequencies, the pulse sweep programs (limit, step, limit, step),
+// the filter program, the waveform cycle, the arpeggio steps (step 0 is data, steps 1 and 2 are
+// stored from the instrument's vibrato byte) and the pointers of the waveform and pitch programs.
+cell freq_lo: u8[256] @ L.freq_lo ro notes(lo, 0);
+cell freq_hi: u8[256] @ L.freq_hi ro notes(hi, 0);
+table pw_program @ L.pw_step stride 4 { until: u8; step: u8; then_until: u8; then_step: u8; }
+cell filt: u8[12] @ L.filter ro;
+cell wave_cycle: u8[4] @ L.wave_arp ro;
+cell arp: u8[3] @ L.arp_delay ro;
+cell arp_1: u8 @ L.filt_lo;
+cell arp_2: u8 @ L.filt_hi;
+cell wave_ctrl_ptr: u16[16] @ (L.wave_prog_ptr, L.wave_prog_ptr + 2) ro;
+cell wave_pitch_ptr: u16[16] @ (L.wave_prog_ptr + 4, L.wave_prog_ptr + 6) ro;
+table wave_ctrl via wave_ctrl_ptr stride 1 { b: u8; }
+table wave_pitch via wave_pitch_ptr stride 1 { b: u8; }
+
+// Shared state: the tempo counter, the song state ($02 ended, $01 restart), the filter's routing
+// and owning voice, and the slide command's rate and delay.
+state countdown: u8 = L.init_countdown;
+state ae: u8 = L.init_ae;
+state arp_scratch: u8 = L.init_arp_scratch;
+state play_state: u8 = L.init_play_state;
+state route: u8 = L.init_route;
+state filter_voice: u8 = L.init_filter_voice;
+state slide_rate: u16 = L.init_slide_rate;
+state slide_delay: u8 = L.init_slide_delay;
 
 machine clock {
-  signal run: bool = false;
+  signal due: bool = false;
 
-  proc reinit() {
-    for k in 0..3 {
-      cnt[k] := 0;
-      seq_pos[k] := 0;
-      pat_pos[k] := 0;
-      dur_cnt[k] := 0;
-      note[k] := 0;
-    }
-    st := 0;
-  }
-
-  proc cold_init() {
-    for k in 0..0x63 {
-      work_area[k] := 0;
-    }
-    c9 := 0xB0;
-    reinit();
-  }
+  counter beat: countdown { on frame -= 1; reload speed; wrap when neg(countdown - 1) -> row; }
+  handler on_row on row { due := true; }
 
   step {
     if L.has_state {
-      if st == 2 {
-        return;
+      if play_state == 2 {
+        finish;
       }
-      if st == 1 {
-        reinit();
-        return;
+      if play_state == 1 {
+        for k in 0..3 {
+          voice[k].seqpos := 0;
+          voice[k].patpos := 0;
+          voice[k].left := 0;
+          voice[k].key := 0;
+          voice[k].ticks := 0;
+        }
+        play_state := 0;
+        finish;
       }
     }
-    for k in 0..3 {
-      cnt[k] += 1;
-    }
-    sid[0x18] := volume_imm;
-    let dec = ca - 1;
-    if neg(dec) {
-      dec := speed;
-    }
-    ca := dec;
-    run := true;
+    sid[VOLUME] := volume;
+    fire frame;
   }
 }
 
 machine voice[x in 0..3] {
-  proc lab_1d35() {
-    sid[u16(wad) + 4] := d0[x];
-  }
+  state seqpos: u8 = L.init_seqpos[x];
+  state patpos: u8 = L.init_patpos[x];
+  state left: u8 = L.init_left[x];
+  state dur: u8 = L.init_dur[x];
+  state wave: u8 = L.init_wave[x];
+  state ctrl: u8 = L.init_ctrl[x];
+  state key: u8 = L.init_key[x];
+  state instr: u8 = L.init_instr[x];
+  state freq: u16 = L.init_freq[x];
+  state slide: u8 = L.init_slide[x];
+  state ticks: u8 = L.init_ticks[x];
+  state pw: u16 = L.init_pw[x];
+  state pulse: u8 = L.init_pulse[x];
+  state trans: u8 = L.init_trans[x];
+  state vib_dir: u8 = L.init_vib_dir[x];
+  state vib_pos: u8 = L.init_vib_pos[x];
+  state arp_pos: u8 = L.init_arp_pos[x];
+  state depth: u8 = L.init_depth[x];
+  state cutoff: u8 = L.init_cutoff[x];
+  state pw_up: u8 = L.init_pw_up[x];
+  state repeat: u8 = L.init_repeat[x];
 
-  proc lab_1d25(ad: u8, noteidx: u8) {
-    sid[ad] := freq_lo_tab[noteidx];
-    sid[u16(ad) + 1] := freq_hi_tab[noteidx];
-  }
+  // The voice's SID registers start at reg; read is set once the voice has read a note.
+  signal reg: u16 = 0;
+  signal read: bool = false;
 
-  proc end_of_pattern() {
-    pat_pos[x] := 0;
-    let advance = true;
-    if rcnt[x] != 0 {
-      let nrc = rcnt[x] - 1;
-      rcnt[x] := nrc;
-      if !neg(nrc) {
-        advance := false;
-      }
-    }
-    if advance {
-      seq_pos[x] += 1;
-    }
-  }
+  counter age: ticks { on frame += 1; on note reset; }
+  counter remaining: left { on row -= 1; reload 0; wrap when neg(left - 1) -> note; }
+  counter again: repeat { on pattern_end -= 1; wrap when repeat == 0 -> next_entry; }
 
-  proc lab_19bb() {
-    end_of_pattern();
-    lab_1d35();
-  }
-
-  proc pattern_byte(y: u8) -> u8 {
-    pat_pos[x] += 1;
-    let b = ind(0xFD, y + 1);
-    if b == 0xFF {
-      lab_19bb();
-    } else {
-      zp_f8 := b;
-    }
-    return b;
-  }
-
-  proc read_pattern_byte() {
-    let b = pattern_byte(cpu.y);
-  }
-
-  proc note_row(f8: u8) {
-    let ad = wad;
-    dur_cnt[x] := dur[x];
-    let noteidx = f8 + trans[x];
-    note[x] := noteidx;
-    let lo = freq_lo_tab[noteidx];
-    let hi = freq_hi_tab[noteidx];
-    sid[u16(ad) + 1] := hi;
-    fhi[x] := hi;
-    fhi0[x] := hi;
-    sid[ad] := lo;
-    flo[x] := lo;
-    if d7[x] == 0 {
-      let ins = instr_id[x] << 3;
-      x8 := ins;
-      stream record = L.instr + u16(ins) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:instrument";
-      sid[u16(ad) + 5] := instr_tab[u16(ins) + 2];
-      sid[u16(ad) + 6] := instr_tab[u16(ins) + 3];
-      let aux_v = instr_tab[u16(ins) + 4];
-      let pulse_ctrl = instr_tab[u16(ins)];
-      let wave = instr_tab[u16(ins) + 1];
-      wf[x] := wave;
-      d0[x] := wave;
-      sid[u16(ad) + 2] := 0;
-      pwlo[x] := 0;
-      pctrl[x] := pulse_ctrl;
-      let pw_hi = pulse_ctrl & 0x0F;
-      sid[u16(ad) + 3] := pw_hi;
-      pwhi[x] := pw_hi;
-      dir[x] := 1;
-      aux[x] := aux_v;
+  // The orderlist: transposes and repeats take effect as they are passed; a pattern, $FE and
+  // $FF stop the cursor.
+  cursor orderlist {
+    table @ orderptr[x] width 1;
+    pos seqpos;
+    on order_byte step;
+    match c0 {
+      0x80..0xFD => value(trans = c0 & 0x1F);
+      0x40..0x7F => value(repeat = c0 & 0x3F);
+      _ => stop;
     }
   }
 
-  proc row_advance() {
-    let cur = pat_pos[x] + 1;
-    pat_pos[x] := cur;
-    if ind(0xFD, cur) == 0xFF {
-      end_of_pattern();
+  // A pattern: a note ends the read; the others set the voice's slide, instrument and duration.
+  cursor pattern {
+    table @ patptr[orderlist.c0] width 2;
+    pos patpos;
+    on pattern_byte step; on pattern_end reset;
+    match c0 {
+      0xF0..0xFF => end take 2;
+      0xE0..0xEF => value(slide = 1 when (c0 & 1) == 0, slide = 2 when (c0 & 1) == 1,
+                          slide_rate.hi = (c0 & 0x0E) >> 1, slide_rate.lo = c1 & 0xF0,
+                          slide_delay = c1 & 0x0F) take 2;
+      0xC0..0xDF => value(instr = c0 & 0x1F) take 1;
+      0x80..0xBF => value(dur = c0 & 0x3F) take 1;
+      _ => end take 1;
     }
   }
 
-  proc tv_note_row() {
-    note_row(zp_f8);
-    row_advance();
+  handler to_next on next_entry {
+    seqpos += 1;
   }
 
-  proc lab_193a(f8: u8) {
-    note_row(f8);
-    row_advance();
-    lab_1d35();
+  handler fetch on note {
+    read := true;
+    next_note();
   }
 
-  proc pattern_walk() {
-    let cur = pat_pos[x];
-    while true bound 600 {
-      let f8 = ind(0xFD, cur);
-      zp_f8 := f8;
-      if (f8 & 0xF0) == 0xF0 {
-        d7[x] := 1;
-        cur := cur + 1;
-        pat_pos[x] := cur;
-        f8 := ind(0xFD, cur);
-        zp_f8 := f8;
-        lab_193a(f8);
-        return;
-      }
-      d7[x] := 0;
-      if (f8 & 0xF0) == 0xE0 {
-        slide_mode[x] := (f8 & 1) + 1;
-        bc := (f8 & 0x0E) >> 1;
-        cur := cur + 1;
-        pat_pos[x] := cur;
-        let nb = ind(0xFD, cur);
-        bb := nb & 0xF0;
-        slide_imm := nb & 0x0F;
-        cur := cur + 1;
-        pat_pos[x] := cur;
-        f8 := ind(0xFD, cur);
-        zp_f8 := f8;
-      }
-      if (f8 & 0xE0) == 0xC0 {
-        instr_id[x] := f8 & 0x1F;
-        let b = pattern_byte(cur);
-        cur := cur + 1;
-        if b == 0xFF {
-          return;
+  handler hold on row {
+    if !read && ticks != 0 {
+      ctrl := wave & 0xFE;
+    }
+  }
+
+  proc next_note() {
+    let seeking = true;
+    while seeking bound 1024 {
+      let found = false;
+      react orderlist on order_byte() -> found;
+      if found {
+        match orderlist.c0 {
+          0xFE => {
+            for k in 0..0x18 {
+              sid[k] := 0;
+            }
+            play_state := 2;
+            if L.has_state {
+              finish;
+            }
+            return;
+          }
+          0xFF => {
+            seqpos := 0;
+            patpos := 0;
+            route := 0;
+          }
+          _ => seeking := false;
         }
-        f8 := b;
       }
-      if (f8 & 0xC0) == 0x80 {
-        dur[x] := f8 & 0x3F;
-        let b = pattern_byte(cur);
-        cur := cur + 1;
-        if b == 0xFF {
-          return;
-        }
+    }
+    slide := 0;
+    arp_pos := 3;
+    read_pattern();
+    sid[reg + CTRL] := ctrl;
+  }
+
+  // A pattern is read a command at a time up to a note. What follows a slide may be an
+  // instrument, a duration or a note, and after an instrument a duration or a note; any other
+  // byte there is the note. A pattern that lies over the arpeggio's zero-page byte (a null
+  // pointer) reads that variable there, as a note.
+  proc read_pattern() {
+    let after = 0;
+    let walking = true;
+    while walking bound 600 {
+      let at = patptr[orderlist.c0] + patpos;
+      let lands = scratch(at);
+      let first = byte_at(at, pattern.c0);
+      let plain = lands || (after != 0 && first >= ite(after == 2, 0xC0, 0xE0));
+      let second = byte_at(at + 1, pattern.c1);
+      let n = ite(first >= 0xF0 && !plain, second, first);
+      let noted = plain;
+      if plain {
+        patpos += 1;
       } else {
-        lab_193a(f8);
-        return;
+        react pattern on pattern_byte() -> noted;
       }
-    }
-  }
-
-  proc sequence_walk() {
-    let b = 0;
-    let searching = true;
-    while searching bound 1024 {
-      b := ind(0xFB, seq_pos[x]);
-      if b == 0xFE {
-        for k in 0..0x18 {
-          sid[k] := 0;
-        }
-        st := 2;
-        return;
+      if noted {
+        start_note(n, plain || first < 0xF0);
+        walking := false;
       }
-      if b == 0xFF {
-        dur_cnt[x] := 0;
-        seq_pos[x] := 0;
-        pat_pos[x] := 0;
-        c9 := 0;
-      } else {
-        be := b;
-        if (b & 0x80) != 0 {
-          trans[x] := b & 0x1F;
-          seq_pos[x] += 1;
-        } elif (b & 0x40) != 0 {
-          rcnt[x] := b & 0x3F;
-          seq_pos[x] += 1;
-        } else {
-          searching := false;
+      after := ite(noted, 0, ite((first & 0xF0) == 0xE0, 1, ite((first & 0xE0) == 0xC0, 2, 0)));
+      if (first & 0xF0) != 0xE0 || plain {
+        let ahead = byte_at(patptr[orderlist.c0] + patpos, pattern.ahead);
+        if ahead == 0xFF {
+          fire pattern_end;
+          walking := false;
         }
       }
     }
-    let y = b << 1;
-    let pat_lo = pat_tab[y];
-    let pat_hi = pat_tab[y + 1];
-    zp_fd := pat_lo;
-    zp_fe := pat_hi;
-    stream notes = word(pat_lo, pat_hi) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:pattern";
-    slide_mode[x] := 0;
-    cnt[x] := 0;
-    vb8[x] := 3;
-    pattern_walk();
   }
 
-  proc filter_cutoff_write(val: u8) {
-    fc0[x] := val;
-    sid[0x16] := val;
+  // The zero-page bytes the routine works through: a pattern that lies over them (a null pointer
+  // reads page zero) reads the variable there.
+  proc scratch(at: u16) -> bool {
+    return at == L.arp_zp || at == L.voice_zp || at - L.order_zp < 2 || at - L.pat_zp < 2;
   }
 
-  proc filter_resonance() {
-    let a = zp_ff << 1;
-    if a == 0 {
-      a := a + 1;
+  proc byte_at(at: u16, memory: u8) -> u8 {
+    if at == L.arp_zp {
+      return arp_scratch;
     }
-    bf := a;
-    if (c9 & a) == 0 {
-      sid[0x17] := c9 + a;
+    if at == L.voice_zp {
+      return x;
     }
+    if at - L.order_zp < 2 {
+      return ite(at == L.order_zp, lo(orderptr[x]), hi(orderptr[x]));
+    }
+    if at - L.pat_zp < 2 {
+      return ite(at == L.pat_zp, lo(patptr[orderlist.c0]), hi(patptr[orderlist.c0]));
+    }
+    return memory;
   }
 
-  proc arp_delay_step(ad: u8) {
-    let nb8 = vb8[x] - 1;
-    vb8[x] := nb8;
-    if neg(nb8) {
-      vb8[x] := 2;
-    }
-    let delay = arp_delay_tab[vb8[x]];
-    zp_41 := delay;
-    lab_1d25(ad, note[x] + delay);
+  proc put_word(at: u8, value: u16) {
+    sid[reg + at] := lo(value);
+    sid[reg + at + 1] := hi(value);
   }
 
-  proc wave_program(ad: u8) {
-    let d2aa = vibc;
-    let y = d2aa & 0x0F;
-    wave_ctrl_op := word(wprog[y], wprog[y + 2]);
-    wave_pitch_op := word(wprog[y + 4], wprog[y + 6]);
-    if cnt[x] >= 0x0F {
-      lab_1d35();
-      return;
-    }
-    let idx = cnt[x] - 1;
-    d0[x] := mem[wave_ctrl_op + u16(idx)];
-    let pitch = mem[wave_pitch_op + u16(idx)];
-    bf := pitch;
-    if (d2aa & 0x10) != 0 {
-      lab_1d25(ad, note[x] + pitch);
-    } else {
-      sid[u16(ad) + 1] := pitch + 0x0D;
-      sid[ad] := 0;
-    }
-    lab_1d35();
-  }
-
-  proc wave_arp_step(ad: u8) {
-    let acv = ac;
-    if (acv & 0x10) == 0 {
-      if (acv & 0x80) != 0 {
-        if cnt[x] < 2 {
-          sid[u16(ad) + 1] := 0x48;
-          sid[ad] := 0;
-          d0[x] := 0x81;
-          lab_1d35();
-          return;
-        }
-        sid[ad] := flo[x];
-        sid[u16(ad) + 1] := fhi[x];
-        d0[x] := wf[x] & 0xFE;
-      }
-      if (acv & 4) != 0 {
-        arp_delay_step(ad);
-      }
-      lab_1d35();
-      return;
-    }
-    wave_program(ad);
-  }
-
-  proc filter_program(ad: u8) {
-    if (ac & 1) == 0 {
-      if zp_ff == cc {
-        filter_cutoff_write(0xFF);
-      }
-      wave_arp_step(ad);
-      return;
-    }
-    cc := zp_ff;
-    zp_f9 := lo(L.filter);
-    zp_fa := hi(L.filter);
-    let c299 = cnt[x];
-    if c299 >= filt[11] {
-      filter_cutoff_write(filt[5]);
-      wave_arp_step(ad);
-      return;
-    }
-    let yy = 0x0A;
-    let handled = false;
-    let searching = true;
-    while searching bound 5 {
-      if c299 >= filt[yy] {
-        filter_cutoff_write(fc0[x] + filt[yy - 6]);
-        handled := true;
-        searching := false;
-      } else {
-        yy := yy - 1;
-        if yy == 6 {
-          searching := false;
-        }
-      }
-    }
-    if !handled {
-      if c299 >= filt[6] {
-        filter_resonance();
-        filter_cutoff_write(filt[0]);
-      } else {
-        wave_arp_step(ad);
-        return;
-      }
-    }
-    wave_arp_step(ad);
-  }
-
-  proc pw_write(ad: u8) {
-    pw_carry_imm := 0;
-    if (pctrl[x] & 0x80) != 0 && (cnt[x] & 1) != 0 {
-      pw_carry_imm := 0xB0;
-    }
-    let imm = pw_carry_imm;
-    sid[u16(ad) + 2] := pwlo[x] + imm;
-    sid[u16(ad) + 3] := pwhi[x] + u8(carry(pwlo[x], imm));
-    if (ac & 0x40) != 0 && cnt[x] >= 3 {
-      d0[x] := wave_arp_tab[cnt[x] & 3];
-    }
-    be := ad;
-    filter_program(ad);
-  }
-
-  proc pw_sweep(ad: u8) {
-    let d2ab = ab;
-    if d2ab != 0 {
-      let yy = ((d2ab & 7) - 1) << 2;
-      let c299 = cnt[x];
-      if pw_step_tab[yy] < c299 {
-        let yy2 = yy + 2;
-        if pw_step_tab[yy2] < c299 {
-          a5 := d2ab & 0xFC;
-        } else {
-          a5 := pw_step_tab[yy2 + 1];
-        }
-      } else {
-        a5 := pw_step_tab[yy + 1];
-      }
-      let step = a5;
-      if dir[x] == 0 {
-        let lo_v = pwlo[x];
-        pwlo[x] := lo_v - step;
-        let n = pwhi[x] - u8(borrow(lo_v, step));
-        pwhi[x] := n;
-        if n < 1 {
-          dir[x] := 1;
-        }
-      } else {
-        let lo_v = pwlo[x];
-        pwlo[x] := lo_v + step;
-        let n = pwhi[x] + u8(carry(lo_v, step));
-        pwhi[x] := n;
-        if n >= 0x0F {
-          dir[x] := 0;
-        }
-      }
-    }
-    pw_write(ad);
-  }
-
-  proc slide_step(ad: u8) {
-    let diff = dur[x] - dur_cnt[x];
-    if diff >= slide_imm && slide_mode[x] != 0 {
-      if (slide_mode[x] & 3) == 1 {
-        let lo_v = flo[x];
-        flo[x] := lo_v + bb;
-        sid[ad] := lo_v + bb;
-        let n = fhi[x] + bc + u8(carry(lo_v, bb));
-        fhi[x] := n;
-        sid[u16(ad) + 1] := n;
-      } else {
-        let lo_v = flo[x];
-        flo[x] := lo_v - bb;
-        sid[ad] := lo_v - bb;
-        let n = fhi[x] - bc - u8(borrow(lo_v, bb));
-        fhi[x] := n;
-        sid[u16(ad) + 1] := n;
-      }
-    }
-    pw_sweep(ad);
-  }
-
-  proc slide_target() {
-    let y = note[x];
-    let flo_y1 = freq_lo_tab[y + 1];
-    let flo_y = freq_lo_tab[y];
-    d6 := flo_y1 - flo_y;
-    let borrow_lo = borrow(flo_y1, flo_y);
-    let fhi_y1 = freq_hi_tab[y + 1];
-    let fhi_y = freq_hi_tab[y];
-    let a = (fhi_y1 - fhi_y - u8(borrow_lo) + cnt[x]
-      + u8(!borrow(fhi_y1, fhi_y, borrow_lo))) >> 1;
-    let more = true;
-    while more bound 10 {
-      let ae1 = ae - 1;
-      ae := ae1;
-      if neg(ae1) {
-        more := false;
-      } else {
-        let carry_in = a & 1;
-        a := a >> 1;
-        d6 := (d6 >> 1) | (carry_in << 7);
-      }
-    }
-    d5 := a;
-    d3 := flo_y;
-    d4 := fhi_y;
-    let yy = va[x] >> 1;
-    more := true;
-    while more bound 10 {
-      yy := yy - 1;
-      if neg(yy) {
-        more := false;
-      } else {
-        let d3v = d3;
-        d3 := d3v - d6;
-        d4 := d4 - d5 - u8(borrow(d3v, d6));
-      }
-    }
-    if cnt[x] >= 4 {
-      yy := vb5[x];
-      more := true;
-      while more bound 130 {
-        yy := yy - 1;
-        if neg(yy) {
-          more := false;
-        } else {
-          let d3v = d3;
-          d3 := d3v + d6;
-          d4 := d4 + d5 + u8(carry(d3v, d6));
-        }
-      }
-      sid[wad] := d3;
-      sid[u16(wad) + 1] := d4;
+  proc start_note(n: u8, sounds: bool) {
+    left := dur;
+    key := n + trans;
+    freq := word(freq_lo[key], freq_hi[key]);
+    put_word(FREQ, freq);
+    if sounds {
+      sid[reg + AD] := instrument[instr].ad;
+      sid[reg + SR] := instrument[instr].sr;
+      wave := instrument[instr].wave;
+      ctrl := wave;
+      pulse := instrument[instr].pulse;
+      pw := u16(pulse & 0x0F) << 8;
+      put_word(PW, pw);
+      pw_up := 1;
     }
   }
 
-  proc vibrato(vib: u8) {
-    va[x] := (vib & 0x78) >> 3;
-    ae := vib & 7;
-    let do_step = false;
-    if vb2[x] == 0 {
-      do_step := true;
-    } else {
-      let nb5 = vb5[x] - 1;
-      vb5[x] := nb5;
-      if nb5 == 0 {
-        let nb2 = vb2[x] + 1;
-        vb2[x] := nb2;
-        if neg(nb2) {
-          do_step := true;
-        }
-      }
-    }
-    if do_step {
-      vb5[x] := vb5[x] + 1;
-      if va[x] < vb5[x] {
-        vb5[x] := va[x];
-        vb2[x] := vb2[x] - 1;
-        vb5[x] := vb5[x] - 1;
-      }
-    }
-    slide_target();
-  }
-
-  proc sustain() {
-    let ins = instr_id[x] << 3;
-    let vib = mod_tab[u16(ins)];
-    ab := mod_tab[u16(ins) + 1];
-    ac := mod_tab[u16(ins) + 2];
-    vibc := vib;
-    let acv = ac;
-    if (acv & 4) == 0 && (acv & 0x10) == 0 && vib != 0 {
+  // A call that reads no note: the instrument's modulation, from vibrato or the arpeggio steps
+  // through to the waveform, ending with the control register.
+  proc modulate() {
+    let vib = modulation[instr].vib;
+    let sweep = modulation[instr].sweep;
+    let flags = modulation[instr].flags;
+    if (flags & 0x14) == 0 && vib != 0 {
       vibrato(vib);
     } elif vib == 0 {
-      filt_hi_op := 0x18;
-      filt_lo_op := 0x0C;
+      arp_1 := 0x0C;
+      arp_2 := 0x18;
     } else {
-      filt_lo_op := vib >> 4;
-      filt_hi_op := vib & 0x0F;
+      arp_1 := vib >> 4;
+      arp_2 := vib & 0x0F;
     }
-    slide_step(wad);
+    let diff = dur - left;
+    if diff >= slide_delay && slide != 0 {
+      if (slide & 3) == 1 {
+        freq += slide_rate;
+      } else {
+        freq -= slide_rate;
+      }
+      put_word(FREQ, freq);
+    }
+    pulse_width(sweep);
+    if (flags & 0x40) != 0 && ticks >= 3 {
+      ctrl := wave_cycle[ticks & 3];
+    }
+    filter_program(flags);
+    if (flags & 0x10) != 0 {
+      waveform_program(vib);
+    } elif (flags & 0x80) != 0 && ticks < 2 {
+      put_word(FREQ, 0x4800);
+      ctrl := 0x81;
+    } else {
+      if (flags & 0x80) != 0 {
+        put_word(FREQ, freq);
+        ctrl := wave & 0xFE;
+      }
+      if (flags & 4) != 0 {
+        arp_pos -= 1;
+        if neg(arp_pos) {
+          arp_pos := 2;
+        }
+        arp_scratch := arp[arp_pos];
+        let pitch = key + arp_scratch;
+        put_word(FREQ, word(freq_lo[pitch], freq_hi[pitch]));
+      }
+    }
+    sid[reg + CTRL] := ctrl;
+  }
+
+  // The vibrato sweeps the pitch a fraction of the way to the next note: a triangle of depth
+  // $78 & vib, scaled down by the low three bits.
+  proc vibrato(vib: u8) {
+    depth := (vib & 0x78) >> 3;
+    let stepping = false;
+    if vib_dir == 0 {
+      stepping := true;
+    } else {
+      vib_pos -= 1;
+      if vib_pos == 0 {
+        vib_dir += 1;
+        if neg(vib_dir) {
+          stepping := true;
+        }
+      }
+    }
+    if stepping {
+      vib_pos += 1;
+      if depth < vib_pos {
+        vib_pos := depth - 1;
+        vib_dir -= 1;
+      }
+    }
+    let lo0 = freq_lo[key];
+    let lo1 = freq_lo[key + 1];
+    let hi0 = freq_hi[key];
+    let hi1 = freq_hi[key + 1];
+    let borrow_lo = borrow(lo1, lo0);
+    let gap = (hi1 - hi0 - u8(borrow_lo) + ticks + u8(!borrow(hi1, hi0, borrow_lo))) >> 1;
+    let unit = word(lo1 - lo0, gap) >> (vib & 7);
+    ae := 0xFF;
+    if ticks >= 4 {
+      let swing = u16(ite(vib_pos > 0x80, 0, vib_pos)) - u16(depth >> 1);
+      put_word(FREQ, word(lo0, hi0) + swing * unit);
+    }
+  }
+
+  // A pulse program row past the table's end lies over the play variables in some builds: the
+  // byte is then that variable (1 the vibrato shift, 2 + voice a voice's vibrato depth).
+  proc stray(kind: u8, memory: u8) -> u8 {
+    match kind {
+      1 => return ae;
+      2 => return voice[0].depth;
+      3 => return voice[1].depth;
+      4 => return voice[2].depth;
+      _ => return memory;
+    }
+  }
+
+  proc pulse_width(sweep: u8) {
+    if sweep != 0 {
+      let p = ((sweep & 7) - 1) & 0x3F;
+      let wild = p == 0x3F;
+      let until = stray(ite(wild, L.pw_wild[0], 0), pw_program[p].until);
+      let first = stray(ite(wild, L.pw_wild[1], 0), pw_program[p].step);
+      let then_until = stray(ite(wild, L.pw_wild[2], 0), pw_program[p].then_until);
+      let then_step = stray(ite(wild, L.pw_wild[3], 0), pw_program[p].then_step);
+      let step = ite(until >= ticks, first, ite(then_until >= ticks, then_step, sweep & 0xFC));
+      if pw_up == 0 {
+        pw -= u16(step);
+        if hi(pw) < 1 {
+          pw_up := 1;
+        }
+      } else {
+        pw += u16(step);
+        if hi(pw) >= 0x0F {
+          pw_up := 0;
+        }
+      }
+    }
+    let wobble = ite((pulse & 0x80) != 0 && (ticks & 1) != 0, 0xB0, 0);
+    put_word(PW, pw + wobble);
+  }
+
+  proc set_cutoff(value: u8) {
+    cutoff := value;
+    sid[FILTER_CUTOFF] := value;
+  }
+
+  // The filter program, run by the voice that owns the filter, steps with the note's age: it
+  // sweeps the cutoff up from its first value, then sets it for good.
+  proc filter_program(flags: u8) {
+    if (flags & 1) == 0 {
+      if x == filter_voice {
+        set_cutoff(0xFF);
+      }
+    } else {
+      filter_voice := x;
+      if ticks >= filt[11] {
+        set_cutoff(filt[5]);
+      } elif ticks >= filt[10] {
+        set_cutoff(cutoff + filt[4]);
+      } elif ticks >= filt[9] {
+        set_cutoff(cutoff + filt[3]);
+      } elif ticks >= filt[8] {
+        set_cutoff(cutoff + filt[2]);
+      } elif ticks >= filt[7] {
+        set_cutoff(cutoff + filt[1]);
+      } elif ticks >= filt[6] {
+        let bit = ite(x == 0, 1, x << 1);
+        if (route & bit) == 0 {
+          sid[FILTER_ROUTE] := route + bit;
+        }
+        set_cutoff(filt[0]);
+      }
+    }
+  }
+
+  proc waveform_program(vib: u8) {
+    if ticks < 0x0F {
+      let program = vib & 0x0F;
+      let pitch = wave_pitch[program][ticks - 1].b;
+      ctrl := wave_ctrl[program][ticks - 1].b;
+      if (vib & 0x10) != 0 {
+        let at = key + pitch;
+        put_word(FREQ, word(freq_lo[at], freq_hi[at]));
+      } else {
+        put_word(FREQ, word(0, pitch + 0x0D));
+      }
+    }
   }
 
   step {
-    if clock.run && (!L.has_state || st != 2) {
-      let ad = voice_tab[x];
-      wad := ad;
-      zp_ff := x;
-      if ca == speed {
-        let sl = seq_lo_tab[x];
-        let sh = seq_hi_tab[x];
-        zp_fb := sl;
-        zp_fc := sh;
-        let c = dur_cnt[x] - 1;
-        dur_cnt[x] := c;
-        if !neg(c) {
-          if cnt[x] != 0 {
-            d0[x] := wf[x] & 0xFE;
-          }
-          sustain();
-        } else {
-          stream orderlist = word(sl, sh) @ 0 grammar "pyfuturecomposer.streams:GRAMMAR:sequence";
-          sequence_walk();
-        }
-      } else {
-        sustain();
-      }
+    reg := voice_base[x];
+    fire frame;
+    if clock.due {
+      fire row;
+    }
+    if !read {
+      modulate();
     }
   }
 }
 
 schedule {
   clock;
-  for i in L.voices {
-    voice[i];
-  }
+  voice[2];
+  voice[1];
+  voice[0];
 }
